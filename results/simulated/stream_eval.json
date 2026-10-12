@@ -1,0 +1,34 @@
+{
+  "demo": {
+    "falls": 10,
+    "detected": 8,
+    "recall": 0.8,
+    "mean_delay_s": 3.0937499999999893,
+    "false_alarms": 4,
+    "false_alarms_per_hour": 23.82133995037221
+  },
+  "unseen_1": {
+    "falls": 14,
+    "detected": 3,
+    "recall": 0.21428571428571427,
+    "mean_delay_s": 3.1333333333333258,
+    "false_alarms": 1,
+    "false_alarms_per_hour": 5.797101449275363
+  },
+  "unseen_2": {
+    "falls": 14,
+    "detected": 12,
+    "recall": 0.8571428571428571,
+    "mean_delay_s": 2.349999999999998,
+    "false_alarms": 8,
+    "false_alarms_per_hour": 46.15384615384615
+  },
+  "unseen_3": {
+    "falls": 7,
+    "detected": 5,
+    "recall": 0.7142857142857143,
+    "mean_delay_s": 2.493999999999999,
+    "false_alarms": 9,
+    "false_alarms_per_hour": 54.2713567839196
+  }
+}
