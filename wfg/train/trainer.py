@@ -118,7 +118,7 @@ def train(model: FallNet, xs: np.ndarray, ys: np.ndarray, cfg: TrainConfig,
             opt.zero_grad()
             loss.backward()
             opt.step()
-            total += float(loss)
+            total += loss.item()
         sched.step()
         if cfg.verbose:
             print(f"epoch {epoch + 1}/{cfg.epochs} loss {total / steps_per_epoch:.4f}")

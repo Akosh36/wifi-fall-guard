@@ -1,0 +1,32 @@
+name: Simulated experiment
+
+# Manual run: Actions -> "Simulated experiment" -> Run workflow.
+# Trains the deep models on simulated rooms and uploads results.md / results.json.
+on:
+  workflow_dispatch:
+    inputs:
+      methods:
+        description: "methods"
+        default: "classic classic+restd cnn1d cnn1d+mmd cnn1d+dann cnn1d+ft cnn1d+knnmmd"
+      shots:
+        description: "calibration clips per class"
+        default: "0 1 5"
+
+jobs:
+  experiment:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: |
+          pip install torch --index-url https://download.pytorch.org/whl/cpu
+          pip install -e ".[dev]"
+      - run: wfg simulate --rooms sim_a sim_b sim_c sim_d --clips 20 --out data/sim
+      - run: wfg experiment --data data/sim --methods ${{ inputs.methods }} --shots ${{ inputs.shots }} --seeds 0 --epochs 25 --out results/ci
+      - uses: actions/upload-artifact@v4
+        with:
+          name: simulated-results
+          path: results/ci
