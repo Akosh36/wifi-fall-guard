@@ -58,4 +58,4 @@ Hozircha bu simulyatorda ishlaydi. Real uzluksiz yozuvlar uchun ham xuddi shu `s
 
 ## Simulyatsiya natijalari (namuna)
 
-`results/simulated/` papkasida simulyatsiya qilingan 5 xonadagi natija bor. Bu **real natija emas**, faqat butun zanjir ishlashini va "yangi xonada aniqlik tushadi" degan hodisani ko'rsatadi. Diplomga faqat real datasetdagi raqamlarni yozing.
+`results/simulated/` papkasida simulyatsiya qilingan natijalar bor: `results.md` (klassik model) va `deep.md` (CNN va moslashtirish usullari). Bu **real natija emas**, faqat butun zanjir ishlashini va "yangi xonada aniqlik tushadi" degan hodisani ko'rsatadi. Diplomga faqat real datasetdagi raqamlarni yozing.
