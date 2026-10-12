@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="uz">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WiFi Fall Guard</title>
+<style>
+:root{--bg:#f4f6f6;--card:#fff;--fg:#14232a;--muted:#5b6b71;--line:#d8e0e2;--accent:#0b7a75;
+--ok:#1d7a3a;--warn:#b26a00;--bad:#c62828;--font:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+--mono:ui-monospace,"JetBrains Mono",Menlo,monospace}
+@media (prefers-color-scheme:dark){:root{--bg:#0f1719;--card:#162225;--fg:#e3eced;--muted:#9aabb0;--line:#2a3b3f;
+--accent:#4fc4bc;--ok:#6fd18e;--warn:#f0a94a;--bad:#ff6b6b;color-scheme:dark}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.5 var(--font)}
+main{max-width:1100px;margin:0 auto;padding:20px 16px 48px;display:grid;gap:16px;grid-template-columns:repeat(auto-fit,minmax(320px,1fr))}
+header{grid-column:1/-1;display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:8px}
+h1{margin:0;font-size:22px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px;display:flex;flex-direction:column;gap:10px;min-width:0}
+.card h2{margin:0;font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);font-weight:600}
+.state{grid-column:1/-1;border-radius:12px;padding:22px;display:flex;flex-wrap:wrap;gap:16px;align-items:center;justify-content:space-between;
+color:#fff;background:var(--ok);transition:background .3s}
+.state.fall_suspected{background:var(--warn)} .state.alert{background:var(--bad);animation:pulse 1s infinite alternate}
+.state.waiting_for_nodes,.state.starting{background:var(--muted)}
+@keyframes pulse{to{filter:brightness(1.25)}}
+@media (prefers-reduced-motion:reduce){.state.alert{animation:none}}
+.state .big{font-size:30px;font-weight:700}
+.state .sub{opacity:.9}
+button{font:inherit;border:1px solid var(--line);background:var(--card);color:var(--fg);border-radius:8px;padding:8px 14px;cursor:pointer}
+button.primary{background:#fff;color:#000;border:none;font-weight:600}
+button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.bars{display:grid;grid-template-columns:90px 1fr 52px;gap:6px 10px;align-items:center}
+.track{height:10px;background:var(--line);border-radius:99px;overflow:hidden}
+.fill{height:100%;background:var(--accent);width:0;transition:width .3s}
+.fill.fall{background:var(--bad)}
+.num{font-family:var(--mono);text-align:right;font-variant-numeric:tabular-nums}
+canvas{width:100%;height:160px}
+table{width:100%;border-collapse:collapse;font-size:14px}
+td,th{padding:6px 8px;border-bottom:1px solid var(--line);text-align:left}
+th{color:var(--muted);font-weight:600;font-size:12px;text-transform:uppercase}
+.dot{display:inline-block;width:9px;height:9px;border-radius:50%;background:var(--bad);margin-right:6px}
+.dot.on{background:var(--ok)}
+.muted{color:var(--muted)}
+.wide{grid-column:1/-1}
+.pill{font-family:var(--mono);font-size:12px;padding:2px 8px;border-radius:99px;border:1px solid var(--line)}
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>WiFi Fall Guard</h1>
+    <span class="muted" id="meta">ulanmoqda...</span>
+  </header>
+
+  <section class="state" id="state">
+    <div>
+      <div class="big" id="stateText">Ishga tushmoqda</div>
+      <div class="sub" id="activityText">Faoliyat: noma'lum</div>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button class="primary" id="ackBtn">Ogohlantirishni qabul qildim</button>
+      <button class="primary" id="testBtn">Sinov xabari</button>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Model ehtimollari</h2>
+    <div class="bars" id="bars"></div>
+    <div class="muted" id="truth"></div>
+  </section>
+
+  <section class="card">
+    <h2>Yiqilish ehtimoli, oxirgi 2 daqiqa</h2>
+    <canvas id="chart" width="600" height="160" aria-label="Yiqilish ehtimoli grafigi"></canvas>
+  </section>
+
+  <section class="card">
+    <h2>Platalar (ESP32-S3)</h2>
+    <table><thead><tr><th>Plata</th><th>Paket/s</th><th>Yo'qotish</th><th>RSSI</th></tr></thead><tbody id="nodes"></tbody></table>
+  </section>
+
+  <section class="card">
+    <h2>Hodisalar</h2>
+    <table><thead><tr><th>Vaqt</th><th>Hodisa</th><th>Ehtimol</th></tr></thead><tbody id="events"></tbody></table>
+  </section>
+</main>
+<script>
+const UZ = {empty:"xona bo'sh", still:"qimirlamayapti", walk:"yuryapti", sit:"o'tirish", lie:"yotish", fall:"yiqilish"};
+const EV = {fall_suspected:"Yiqilish gumoni", alert:"XAVF: turmadi", recovered:"Turib ketdi", acknowledged:"Qabul qilindi"};
+const $ = id => document.getElementById(id);
+const series = [];
+
+function render(s) {
+  const st = $("state");
+  st.className = "state " + (s.state || "");
+  $("stateText").textContent = s.state_uz || s.state;
+  $("activityText").textContent = "Faoliyat: " + (s.activity_uz || "-") +
+    (s.latency_ms !== undefined ? `  ·  hisoblash ${s.latency_ms} ms` : "");
+  $("meta").textContent = `manba: ${s.source === "sim" ? "simulyator" : "ESP32 (UDP)"}  ·  Telegram: ` +
+    (s.telegram && s.telegram.enabled ? `${s.telegram.recipients} qabul qiluvchi` : "o'chiq");
+  const probs = s.probs || {};
+  $("bars").innerHTML = (s.classes || []).map(c => {
+    const p = probs[c] || 0;
+    return `<span>${UZ[c] || c}</span><div class="track"><div class="fill ${c === "fall" ? "fall" : ""}" style="width:${(p * 100).toFixed(1)}%"></div></div><span class="num">${(p * 100).toFixed(0)}%</span>`;
+  }).join("");
+  $("truth").textContent = s.truth ? `Simulyatordagi haqiqiy harakat: ${UZ[s.truth] || s.truth}` : "";
+  $("nodes").innerHTML = (s.nodes || []).map(n =>
+    `<tr><td><span class="dot ${n.online ? "on" : ""}"></span>#${n.node}</td><td class="num">${n.rate_hz}</td>` +
+    `<td class="num">${(n.loss * 100).toFixed(1)}%</td><td class="num">${n.rssi ?? "-"}</td></tr>`).join("");
+  if (s.t) { series.push([s.t, probs.fall || 0, s.state]); while (series.length && series[0][0] < s.t - 120) series.shift(); }
+  draw();
+}
+
+function draw() {
+  const c = $("chart"), ctx = c.getContext("2d");
+  const dpr = window.devicePixelRatio || 1, w = c.clientWidth, h = c.clientHeight;
+  c.width = w * dpr; c.height = h * dpr; ctx.scale(dpr, dpr);
+  const css = getComputedStyle(document.documentElement);
+  ctx.clearRect(0, 0, w, h);
+  ctx.strokeStyle = css.getPropertyValue("--line"); ctx.lineWidth = 1;
+  [0.25, 0.5, 0.75].forEach(y => { ctx.beginPath(); ctx.moveTo(0, h - y * h); ctx.lineTo(w, h - y * h); ctx.stroke(); });
+  if (series.length < 2) return;
+  const t1 = series[series.length - 1][0], t0 = t1 - 120;
+  ctx.strokeStyle = css.getPropertyValue("--bad"); ctx.lineWidth = 2; ctx.beginPath();
+  series.forEach(([t, p], i) => { const x = (t - t0) / 120 * w, y = h - p * (h - 4) - 2; i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); });
+  ctx.stroke();
+  ctx.fillStyle = css.getPropertyValue("--muted"); ctx.font = "11px system-ui";
+  ctx.fillText("100%", 4, 12); ctx.fillText("-2 daq", 4, h - 4); ctx.fillText("hozir", w - 36, h - 4);
+}
+
+async function loadEvents() {
+  try {
+    const ev = await (await fetch("/api/events?limit=12")).json();
+    $("events").innerHTML = ev.map(e => `<tr><td>${new Date(e.t * 1000).toLocaleTimeString()}</td>` +
+      `<td>${EV[e.type] || e.type}</td><td class="num">${e.prob ? (e.prob * 100).toFixed(0) + "%" : "-"}</td></tr>`).join("")
+      || `<tr><td colspan="3" class="muted">Hozircha hodisa yo'q</td></tr>`;
+  } catch (e) {}
+}
+
+function connect() {
+  const ws = new WebSocket((location.protocol === "https:" ? "wss://" : "ws://") + location.host + "/ws");
+  ws.onmessage = m => render(JSON.parse(m.data));
+  ws.onclose = () => { $("meta").textContent = "aloqa uzildi, qayta ulanmoqda..."; setTimeout(connect, 2000); };
+}
+$("ackBtn").onclick = async () => { await fetch("/api/ack", {method: "POST"}); loadEvents(); };
+$("testBtn").onclick = async () => {
+  const r = await (await fetch("/api/test-alert", {method: "POST"})).json();
+  $("testBtn").textContent = r.telegram_enabled ? `Yuborildi (${r.sent})` : "Telegram sozlanmagan";
+  setTimeout(() => $("testBtn").textContent = "Sinov xabari", 3000);
+};
+connect(); loadEvents(); setInterval(loadEvents, 3000); window.addEventListener("resize", draw);
+</script>
+</body>
+</html>

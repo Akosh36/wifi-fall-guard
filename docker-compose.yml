@@ -1,0 +1,14 @@
+# docker compose up -d   -> dashboard on http://<host>:8000, CSI on udp/5500
+services:
+  wfg:
+    build: .
+    restart: unless-stopped
+    network_mode: host          # receive UDP from the ESP32 nodes directly
+    environment:
+      WFG_SOURCE: ${WFG_SOURCE:-udp}
+      WFG_MODEL: ${WFG_MODEL:-models/classic_sim.npz}
+      WFG_TELEGRAM_TOKEN: ${WFG_TELEGRAM_TOKEN:-}
+      WFG_TELEGRAM_CHAT_IDS: ${WFG_TELEGRAM_CHAT_IDS:-}
+    volumes:
+      - ./data:/app/data
+      - ./models:/app/models

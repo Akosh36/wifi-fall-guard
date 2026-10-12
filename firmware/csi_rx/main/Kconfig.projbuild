@@ -1,0 +1,32 @@
+menu "WiFi Fall Guard receiver"
+
+config WFG_WIFI_SSID
+    string "WiFi SSID (transmitter softAP or home router)"
+    default "WFG-NET"
+
+config WFG_WIFI_PASSWORD
+    string "WiFi password"
+    default "wfg12345"
+
+config WFG_SERVER_IP
+    string "Server (laptop / Raspberry Pi) IP address"
+    default "192.168.4.2"
+    help
+        Address of the computer running `wfg serve` or `wfg record`.
+        255.255.255.255 broadcasts to the whole network.
+
+config WFG_SERVER_PORT
+    int "Server UDP port"
+    default 5500
+
+config WFG_NODE_ID
+    int "Node id (0, 1, 2, ...), unique per receiver"
+    range 0 255
+    default 0
+
+config WFG_PING_HZ
+    int "CSI sampling rate (gateway pings per second)"
+    range 10 500
+    default 100
+
+endmenu

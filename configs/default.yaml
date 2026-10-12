@@ -1,0 +1,32 @@
+# WiFi Fall Guard runtime settings. Environment variables override these:
+#   WFG_SOURCE, WFG_MODEL, WFG_TELEGRAM_TOKEN, WFG_TELEGRAM_CHAT_IDS, WFG_UDP_PORT
+
+source: sim            # "udp" = real ESP32-S3 nodes, "sim" = built-in simulator
+udp:
+  host: 0.0.0.0
+  port: 5500           # must match CONFIG_WFG_SERVER_PORT in firmware/csi_rx
+nodes: [0, 1, 2]       # CONFIG_WFG_NODE_ID of each receiver
+fs: 100.0              # packets per second sent by firmware/csi_tx
+
+model: models/classic_sim.npz   # .npz = NumPy baseline, .pt = PyTorch model
+hop_seconds: 0.5
+
+detector:
+  fall_threshold: 0.4       # probability needed to count a window as "fall"
+  confirm_windows: 2        # consecutive fall windows before "fall suspected"
+  inactivity_seconds: 20    # no walking for this long after a fall -> ALERT
+  recovery_threshold: 0.6
+  recovery_windows: 3       # walking windows that cancel the alarm
+
+sim:
+  room: demo
+  speed: 1.0
+  seed: 0
+
+db: data/wfg.sqlite3
+telegram:
+  token: ""            # better: set WFG_TELEGRAM_TOKEN
+  chat_ids: []
+http:
+  host: 0.0.0.0
+  port: 8000

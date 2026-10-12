@@ -1,0 +1,27 @@
+# Dataset recording protocol for one volunteer in one room (about 45 minutes).
+# Falls are performed slowly and onto a gym mat; see docs/dataset_protocol.md.
+steps:
+  - label: empty
+    reps: 10
+    seconds: 5
+    say: "Xonadan chiqing, eshikni yoping."
+  - label: still
+    reps: 10
+    seconds: 5
+    say: "Tik turing yoki stulda qimirlamay o'tiring."
+  - label: walk
+    reps: 10
+    seconds: 5
+    say: "Xonada odatdagidek yuring."
+  - label: sit
+    reps: 10
+    seconds: 5
+    say: "Tik turgan holatdan stulga o'tiring."
+  - label: lie
+    reps: 10
+    seconds: 6
+    say: "Matras yoki karavotga sekin yoting."
+  - label: fall
+    reps: 10
+    seconds: 5
+    say: "Matras ustiga yiqiling (oldinga, yonga yoki orqaga - har safar har xil)."

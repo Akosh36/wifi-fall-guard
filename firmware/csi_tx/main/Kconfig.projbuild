@@ -1,0 +1,21 @@
+menu "WiFi Fall Guard transmitter"
+
+config WFG_AP_SSID
+    string "Access point SSID"
+    default "WFG-NET"
+
+config WFG_AP_PASSWORD
+    string "Access point password (8+ characters, empty = open network)"
+    default "wfg12345"
+
+config WFG_AP_CHANNEL
+    int "WiFi channel (keep the same in every room)"
+    range 1 13
+    default 6
+
+config WFG_TX_POWER_QDBM
+    int "Max transmit power in 0.25 dBm units (78 = 19.5 dBm)"
+    range 8 84
+    default 78
+
+endmenu

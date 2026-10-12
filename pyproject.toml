@@ -1,0 +1,37 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "wifi-fall-guard"
+version = "0.1.0"
+description = "Camera-free fall detection for the elderly using WiFi CSI from ESP32-S3 nodes, with cross-room domain adaptation."
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.10"
+authors = [{ name = "Akosh" }]
+dependencies = [
+    "numpy>=1.24",
+    "scipy>=1.10",
+    "pyyaml>=6.0",
+    "fastapi>=0.110",
+    "uvicorn[standard]>=0.27",
+    "httpx>=0.27",
+]
+
+[project.optional-dependencies]
+ml = ["torch>=2.2"]
+mqtt = ["paho-mqtt>=2.0"]
+dev = ["pytest>=8.0"]
+
+[project.scripts]
+wfg = "wfg.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["wfg*"]
+
+[tool.setuptools.package-data]
+"wfg.server" = ["static/*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
