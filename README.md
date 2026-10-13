@@ -3,7 +3,7 @@
 **WiFi CSI asosida turli xonalarga moslasha oladigan, keksalar uchun kamerasiz yiqilishni aniqlash tizimi.**
 Bakalavr diplom ishi loyihasi.
 
-Arzon ESP32-S3 platalari Wi-Fi signalining har bir subcarrier bo'yicha o'zgarishini (Channel State Information, CSI) o'lchaydi. Odam yiqilganda signal o'ziga xos tarzda o'zgaradi: qisqa, tez harakat (yuqori Doppler) va undan keyin harakatsizlik. Tizim buni aniqlaydi, odam 20 soniya ichida turmasa qarindoshlarga Telegram orqali xabar yuboradi. Kamera yo'q, shuning uchun hammom va yotoqxonada ham maxfiylik saqlanadi.
+Arzon ESP32-S3 platalari Wi-Fi signalining har bir subcarrier bo'yicha o'zgarishini (Channel State Information, CSI) o'lchaydi. Odam yiqilganda signal o'ziga xos tarzda o'zgaradi: qisqa, tez harakat (yuqori Doppler) va undan keyin harakatsizlik. Tizim buni aniqlaydi va qarindoshlarga Telegram hamda Android ilova orqali xabar beradi. Odam 3 daqiqa ichida turmasa, yurak urishi va nafasga qarab tez yordam avtomatik chaqiriladi yoki egasidan "chaqirilsinmi?" deb so'raladi ([docs/escalation.md](docs/escalation.md)). Kamera yo'q, shuning uchun hammom va yotoqxonada ham maxfiylik saqlanadi.
 
 Ilmiy qism: model **hech qachon ko'rmagan xonada** qanchalik ishlashi va bir necha kalibrlash klipi bilan qanchalik tiklanishi (MMD, CORAL, DANN, fine-tuning, KNN-MMD).
 
@@ -89,6 +89,7 @@ Batafsil: [docs/architecture.md](docs/architecture.md). Diplomning yozma qismi r
 | Python tizimi (yig'ish, DSP, modellar, moslashish, server, Telegram, veb panel) | Tayyor, testlar bilan |
 | ESP32-S3 proshivkasi | Yozilgan, CI'da ESP-IDF v5.3 bilan kompilyatsiya qilinadi. Haqiqiy platalarda hali sinalmagan |
 | Android ilova (3D xona, alert) | Yozilgan, APK CI'da yig'iladi: [docs/android.md](docs/android.md) |
+| Yiqilishdan keyingi vaqt chizig'i va tez yordam qarori | Yozilgan, testlar bilan: [docs/escalation.md](docs/escalation.md) |
 | Simulyatsiya natijalari | `results/simulated/` (faqat zanjir ishlashini ko'rsatadi, diplom uchun real natija emas) |
 | Real dataset va natijalar | Qurilmalar kelgandan keyin |
 

@@ -10,4 +10,12 @@
     <string name="ack">Tasdiqlash</string>
     <string name="intrusion_title">XAVF: uyda harakat</string>
     <string name="alert_text_intrusion">Qo\'riqlash rejimida uyda harakat aniqlandi. Uyda hech kim bo\'lmasligi kerak edi!</string>
+    <string name="esc_ask_title">Tez yordam chaqirilsinmi?</string>
+    <string name="esc_countdown_title">XAVFLI: tez yordam chaqirilmoqda</string>
+    <string name="esc_called_title">Tez yordam chaqirildi</string>
+    <string name="esc_yes">Ha, chaqiring</string>
+    <string name="esc_no">Kerak emas</string>
+    <string name="esc_now">Hozir chaqirish</string>
+    <string name="esc_cancel">Bekor qilish</string>
+    <string name="esc_dial">Qo\'ng\'iroq qilish</string>
 </resources>

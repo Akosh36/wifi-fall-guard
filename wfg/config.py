@@ -29,6 +29,14 @@ DEFAULTS = {
     "auth": {"token": ""},  # set when the server is reachable from outside the home network
     "security": {"exit_delay": 30.0, "confirm_windows": 3, "quiet_seconds": 60.0},
     "history_days": 7,
+    # After a fall: observe, then call automatically (abnormal vitals) or ask the owner (see escalation.py).
+    "escalation": {
+        "observe_seconds": 180.0, "heart_low": 45.0, "heart_high": 130.0, "breath_low": 8.0, "breath_high": 30.0,
+        "min_abnormal": 2, "auto_call": True, "cancel_seconds": 30.0, "approvals_required": 1,
+        "no_answer_seconds": 600.0, "min_nodes_online": 2, "number": "103", "address": "", "call_webhook": "",
+    },
+    # Optional camera add-on: a JPEG snapshot URL, fetched only during a fall episode (never streamed).
+    "camera": {"snapshot_url": ""},
     # Room layout for the 3D view (metres; x = width, y = depth, z = height).
     "room": {
         "name": "Xona",

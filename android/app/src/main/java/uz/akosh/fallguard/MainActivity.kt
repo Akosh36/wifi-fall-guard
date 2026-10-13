@@ -3,6 +3,7 @@ package uz.akosh.fallguard
 import android.Manifest
 import android.annotation.SuppressLint
 import android.app.Activity
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
@@ -27,6 +28,8 @@ class MainActivity : Activity() {
 
     companion object {
         @Volatile var visible = false
+        const val EXTRA_DIAL_NUMBER = "dial_number"
+        const val EXTRA_DIAL_KEY = "dial_key"
         // served over http so the page may open ws:// and http:// connections to the home server
         private const val START_URL = "http://appassets.androidplatform.net/assets/index.html"
     }
@@ -92,6 +95,19 @@ class MainActivity : Activity() {
             requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 1)
         }
         if (prefs.monitoring) AlertService.start(this)
+        handleDial(intent)
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        handleDial(intent)
+    }
+
+    /** The alert service opens this screen with a number when the server decided to call an ambulance. */
+    private fun handleDial(intent: Intent?) {
+        val number = intent?.getStringExtra(EXTRA_DIAL_NUMBER) ?: return
+        Dialer.autoDial(this, intent.getStringExtra(EXTRA_DIAL_KEY) ?: "", number)
+        intent.removeExtra(EXTRA_DIAL_NUMBER)
     }
 
     override fun onResume() {
@@ -147,6 +163,27 @@ class MainActivity : Activity() {
             runCatching { android.graphics.Color.parseColor(color) }.onSuccess { c ->
                 runOnUiThread { statusSpacer.setBackgroundColor(c) }
             }
+        }
+
+        @JavascriptInterface fun getAutoDial(): Boolean = prefs.autoDial
+
+        @JavascriptInterface
+        fun setCallPrefs(name: String, autoDial: Boolean) {
+            prefs.name = name
+            prefs.autoDial = autoDial
+            if (autoDial && checkSelfPermission(Manifest.permission.CALL_PHONE) != PackageManager.PERMISSION_GRANTED) {
+                runOnUiThread { requestPermissions(arrayOf(Manifest.permission.CALL_PHONE), 2) }
+            }
+        }
+
+        @JavascriptInterface
+        fun call(number: String) {
+            runOnUiThread { Dialer.dial(this@MainActivity, number) }
+        }
+
+        @JavascriptInterface
+        fun autoDial(key: String, number: String) {
+            runOnUiThread { Dialer.autoDial(this@MainActivity, key, number) }
         }
 
         @JavascriptInterface

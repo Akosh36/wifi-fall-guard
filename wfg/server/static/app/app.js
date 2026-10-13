@@ -24,8 +24,11 @@ const DEFAULT_ROOM = {
 const COLORS = { ok: 0x1fbf6a, bad: 0xe5322d, off: 0x8a94a0 };
 const EVENT_UZ = { fall_suspected: "Yiqilish gumoni", alert: "XAVF: odam turmadi", recovered: "Odam turib ketdi",
                    acknowledged: "Tasdiqlandi", intrusion: "Begona harakat!", intrusion_ended: "Harakat to'xtadi",
-                   armed: "Qo'riqlash yoqildi", disarmed: "Qo'riqlash o'chirildi" };
-const RED_EVENTS = new Set(["fall_suspected", "alert", "intrusion"]);
+                   armed: "Qo'riqlash yoqildi", disarmed: "Qo'riqlash o'chirildi",
+                   ask_owner: "Tez yordam so'raldi", emergency: "XAVFLI: avtomatik chaqiruv",
+                   emergency_call: "Tez yordam chaqirildi", emergency_cancelled: "Chaqiruv bekor qilindi",
+                   resolved: "Odam turdi" };
+const RED_EVENTS = new Set(["fall_suspected", "alert", "intrusion", "emergency", "emergency_call"]);
 
 // ---------------------------------------------------------------- settings / bridge
 const bridge = window.WFG || null;
@@ -42,12 +45,17 @@ const cfg = {
   server: (bridge && bridge.getServer()) || store.get("wfg.server", "") || defaultServer(),
   token: (bridge && bridge.getToken()) || store.get("wfg.token", ""),
   demo: bridge ? bridge.getDemo() : store.get("wfg.demo", "0") === "1",
+  // who answers "call an ambulance?" from this device, and whether the phone dials by itself
+  name: store.get("wfg.name", ""),
+  autoDial: bridge?.getAutoDial ? bridge.getAutoDial() : false,
 };
 function saveCfg() {
   if (bridge) bridge.setConfig(cfg.server, cfg.demo, cfg.token);
   store.set("wfg.server", cfg.server);
   store.set("wfg.token", cfg.token);
   store.set("wfg.demo", cfg.demo ? "1" : "0");
+  store.set("wfg.name", cfg.name);
+  bridge?.setCallPrefs?.(cfg.name, cfg.autoDial);
 }
 function api(path) {
   const sep = path.includes("?") ? "&" : "?";
@@ -476,6 +484,11 @@ function render(s) {
   $("nodes").textContent = nodes.length ? `${nodes.filter(n => n.online).length}/${nodes.length} onlayn` : "—";
 
   const red = m === "bad";
+  // every new step of the after-fall timeline (question, countdown, call) brings the dialog back
+  const esc = s.escalation || { state: "idle" };
+  const escKey = `${esc.episode}/${esc.state}`;
+  if (red && esc.state !== "idle" && esc.state !== "observing" && escKey !== render.escKey) muted = false, $("alert").hidden = false;
+  render.escKey = escKey;
   if (red && !wasRed) { muted = false; $("alert").hidden = false; }
   if (!red) $("alert").hidden = true;
   if (red) {
@@ -490,9 +503,78 @@ function render(s) {
       $("ackBtn").textContent = "Tasdiqlash: hammasi joyida";
     }
   }
+  renderEscalation(red && !isIntrusion(s) ? esc : { state: "idle" }, s.server_time || Date.now() / 1000);
   alarm(red && !muted);
   wasRed = red;
 }
+
+// ---------------------------------------------------------------- after a fall: timeline and the ambulance question
+const mmss = sec => `${Math.floor(sec / 60)}:${String(Math.floor(sec % 60)).padStart(2, "0")}`;
+function renderEscalation(e, now) {
+  $("esc").hidden = e.state === "idle";
+  if (e.state === "idle") return;
+  const number = e.number || "103";
+  let fill = 1, text = "";
+  if (e.state === "observing") {
+    const passed = now - e.started_at;
+    fill = Math.min(1, passed / e.observe_seconds);
+    text = `Kuzatuv: ${mmss(passed)} / ${mmss(e.observe_seconds)}. Odam turmasa, yurak urishi va nafasga qarab qaror qilinadi.`;
+  } else if (e.state === "asking") {
+    const ap = e.approvals || { yes: 0, needed: 1 };
+    text = `Odam ${mmss(now - e.started_at)} dan beri turmayapti, ${e.reason}. Tez yordam (${number}) chaqirilsinmi?`
+      + (ap.needed > 1 ? ` Rozilik: ${ap.yes}/${ap.needed}.` : "")
+      + (e.deadline ? ` Javob bo'lmasa ${mmss(Math.max(0, e.deadline - now))} dan keyin chaqiriladi.` : "");
+  } else if (e.state === "countdown") {
+    const left = Math.max(0, e.deadline - now);
+    fill = left / (e.cancel_seconds || 30);
+    text = `XAVFLI: ${e.reason}. Tez yordam ${Math.ceil(left)} soniyadan keyin avtomatik chaqiriladi.`;
+  } else if (e.state === "called") {
+    text = `Tez yordam (${number}) chaqirildi. Qaror: ${e.called_by}.` + (e.address ? ` Manzil: ${e.address}.` : "");
+    autoDial(e, number);
+  }
+  $("escFill").style.width = `${Math.round(fill * 100)}%`;
+  $("escText").textContent = text;
+  $("escAsk").hidden = !["asking", "countdown"].includes(e.state);
+  $("escYes").textContent = e.state === "countdown" ? "🚑 Hozir chaqirish" : "🚑 Ha, chaqiring";
+  $("escNo").textContent = e.state === "countdown" ? "Bekor qilish" : "Kerak emas";
+  const dial = $("escDial");
+  dial.hidden = e.state !== "called";
+  dial.href = `tel:${number}`;
+  dial.textContent = `📞 ${number} ga qo'ng'iroq qilish`;
+  const photo = $("escPhoto");
+  photo.hidden = !e.snapshot_t || cfg.demo;
+  if (!photo.hidden && photo.dataset.t !== String(e.snapshot_t)) {
+    photo.dataset.t = String(e.snapshot_t);
+    photo.src = api(`/api/escalation/snapshot?t=${e.snapshot_t}`);
+  }
+  const key = (e.timeline || []).map(x => x.t + x.kind).join();
+  if (key !== renderEscalation.key) {
+    renderEscalation.key = key;
+    $("escTimeline").replaceChildren(...(e.timeline || []).map(x => {
+      const li = document.createElement("li");
+      const b = document.createElement("b");
+      b.textContent = new Date(x.t * 1000).toLocaleTimeString("uz-UZ") + " ";
+      li.append(b, x.text);
+      return li;
+    }));
+  }
+}
+
+// the phone itself dials once per episode when the owner enabled it (Android app only)
+function autoDial(e, number) {
+  if (!bridge?.autoDial || cfg.demo) return;
+  bridge.autoDial(`${e.started_at}`, number);
+}
+
+async function answerEscalation(call) {
+  const who = cfg.name || "Ilova";
+  if (cfg.demo) { demo.answer(call, who); return; }
+  try { status = { ...status, escalation: { ...status.escalation, ...(await post("/api/escalation", { call, who })) } }; render(status); }
+  catch { toast("Server bilan aloqa yo'q: javob yuborilmadi"); }
+}
+$("escYes").onclick = () => answerEscalation(true);
+$("escNo").onclick = () => answerEscalation(false);
+$("escDial").onclick = ev => { if (bridge?.call) { ev.preventDefault(); bridge.call($("escDial").href.slice(4)); } };
 
 let audioCtx = null, beepTimer = null, alarmOn = false;
 function alarm(on) {
@@ -558,6 +640,8 @@ $("shieldBtn").onclick = () => {
 };
 $("settingsBtn").onclick = () => {
   $("serverInput").value = cfg.server; $("tokenInput").value = cfg.token; $("demoInput").checked = cfg.demo;
+  $("nameInput").value = cfg.name; $("dialInput").checked = cfg.autoDial;
+  $("dialInput").parentElement.hidden = !bridge?.setCallPrefs; // only the Android app can place calls
   $("settings").hidden = false;
 };
 $("closeBtn").onclick = () => { $("settings").hidden = true; };
@@ -566,6 +650,8 @@ $("saveBtn").onclick = () => {
   if (cfg.server && !/^https?:\/\//.test(cfg.server)) cfg.server = "http://" + cfg.server;
   cfg.token = $("tokenInput").value.trim();
   cfg.demo = $("demoInput").checked;
+  cfg.name = $("nameInput").value.trim().slice(0, 40);
+  cfg.autoDial = $("dialInput").checked;
   saveCfg();
   $("settings").hidden = true;
   start();
@@ -693,6 +779,36 @@ function connectLive() {
 const demo = (() => {
   const script = [["walk", 9], ["sit", 7], ["walk", 6], ["lie", 12], ["walk", 6], ["fall", 0]];
   let i = 0, t0 = 0, timer = null, fallAt = null, sec = { state: "off", since: 0 }, intrusionAt = null;
+  // after-fall timeline, shortened: 20 s instead of 3 minutes. Falls alternate between normal vital
+  // signs (the owner is asked) and an abnormal heart rate (automatic call after a 10 s countdown).
+  const OBSERVE = 20, COUNT = 10;
+  let falls = 0, esc = { state: "idle" };
+  const log = (t, kind, text) => esc.timeline.push({ t, kind, text });
+  function escalate(now, heart) {
+    if (esc.state === "idle" && !esc.closed) {
+      esc = { state: "observing", episode: falls, started_at: fallAt, observe_seconds: OBSERVE, cancel_seconds: COUNT, number: "103",
+              approvals: { yes: 0, needed: 1 }, timeline: [] };
+      log(fallAt, "fall", "Yiqilish aniqlandi");
+      log(fallAt, "observe", "20 soniya kuzatilmoqda (demo; haqiqiy tizimda 3 daqiqa)");
+    }
+    if (esc.state === "observing" && now - fallAt >= OBSERVE) {
+      if (heart > 130) {
+        Object.assign(esc, { state: "countdown", deadline: now + COUNT, reason: `yurak urishi anomal (${Math.round(heart)}/daq)` });
+        log(now, "emergency", `Xavfli: ${esc.reason}. ${COUNT} s dan keyin chaqiriladi`);
+        cache.addEvents([{ t: now, type: "emergency" }]);
+      } else {
+        Object.assign(esc, { state: "asking", reason: `yurak urishi va nafas normal (yurak ${Math.round(heart)}/daq)` });
+        log(now, "ask", `Odam turmadi, ${esc.reason}. Egasidan so'raldi`);
+        cache.addEvents([{ t: now, type: "ask_owner" }]);
+      }
+    }
+    if (esc.state === "countdown" && now >= esc.deadline) call(now, "avtomatik");
+  }
+  function call(now, by) {
+    Object.assign(esc, { state: "called", called_by: by, deadline: null });
+    log(now, "call", `Tez yordam (103) chaqirildi: ${by}`);
+    cache.addEvents([{ t: now, type: "emergency_call" }]);
+  }
   function demoLocation(act, now) {
     if (act === "sit") return { x: 0.9, y: 1.0, r: 0.6 };
     if (act === "lie") return { x: 3.0, y: 2.4, r: 0.6 };
@@ -710,10 +826,11 @@ const demo = (() => {
       if (activity === "walk" && sec.state === "armed") { sec = { state: "intrusion", since: now }; cache.addEvents([{ t: now, type: "intrusion" }]); }
       if (sec.state === "intrusion") activity = "walk";
     } else if (act === "fall") {
-      fallAt ??= now;
+      if (fallAt == null) { fallAt = now; falls++; }
       state = now - fallAt > 8 ? "alert" : "fall_suspected";
       activity = now - fallAt > 2 ? "still" : "fall";
-      if (now - fallAt > 40) next(now); // nobody pressed the button: the person "gets up" by themselves
+      escalate(now, falls % 2 ? 72 + 2 * Math.sin(now / 13) : 148 + 4 * Math.sin(now / 7));
+      if (now - fallAt > 75) next(now); // nobody reacted: the person "gets up" by themselves
     } else if (now - t0 > dur) next(now);
     const resting = ["sit", "lie", "still"].includes(activity) && (act !== "lie" || now - t0 > 4);
     status = {
@@ -721,20 +838,34 @@ const demo = (() => {
       probs: { fall: act === "fall" && sec.state === "off" ? 0.86 : 0.02 + Math.random() * 0.05 },
       nodes: [0, 1, 2].map(id => ({ node: id, online: true })),
       location: activity === "empty" ? null : demoLocation(activity, now),
-      vitals: resting ? { breath_bpm: 15 + Math.sin(now / 9), heart_bpm: 71 + 2 * Math.sin(now / 13) } : {},
+      vitals: resting ? { breath_bpm: 15 + Math.sin(now / 9),
+                          heart_bpm: act === "fall" && !(falls % 2) ? 148 + 4 * Math.sin(now / 7) : 71 + 2 * Math.sin(now / 13) } : {},
       security: { ...sec, armed: sec.state !== "off" },
+      escalation: esc,
     };
     cache.addStatus(status);
     render(status);
   }
   function next(now) {
     if (script[i][0] === "fall") cache.addEvents([{ t: fallAt ?? now, type: "fall_suspected" }]);
-    i = (i + 1) % script.length; t0 = now; fallAt = null;
+    i = (i + 1) % script.length; t0 = now; fallAt = null; esc = { state: "idle" };
   }
   return {
     start() { this.stop(); i = 0; t0 = Date.now() / 1000; fallAt = null; if (!room) buildRoom(DEFAULT_ROOM); timer = setInterval(tick, 500); tick(); },
     stop() { clearInterval(timer); },
     ack() { cache.addEvents([{ t: Date.now() / 1000, type: "acknowledged" }]); next(Date.now() / 1000); },
+    answer(yes, who) {
+      const now = Date.now() / 1000;
+      if (esc.state === "idle" || esc.state === "called") return;
+      log(now, "answer", `${who}: ${yes ? "chaqirilsin" : "kerak emas"}`);
+      if (yes) call(now, who);
+      else {
+        log(now, "emergency_cancelled", `${who} bekor qildi`);
+        cache.addEvents([{ t: now, type: "emergency_cancelled" }]);
+        esc = { ...esc, state: "idle", closed: true };
+      }
+      tick();
+    },
     setArmed(on) {
       const now = Date.now() / 1000;
       sec = on ? { state: "arming", since: now } : { state: "off", since: now };

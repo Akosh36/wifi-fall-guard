@@ -19,6 +19,7 @@ import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
 import okhttp3.Call
 import okhttp3.Callback
+import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
@@ -39,6 +40,9 @@ class AlertService : Service() {
 
     companion object {
         const val ACTION_ACK = "uz.akosh.fallguard.ACK"
+        const val ACTION_ANSWER = "uz.akosh.fallguard.ANSWER"
+        const val EXTRA_CALL = "call"
+        private const val ID_ESC = 3
         private const val CH_MONITOR = "monitor"
         private const val CH_ALERT = "alerts_v1"
         private const val ID_MONITOR = 1
@@ -68,6 +72,7 @@ class AlertService : Service() {
     private var server = ""
     private var lastState = ""
     private var lastLine = ""
+    private var lastEscKey = ""
     private var stopped = false
 
     override fun onBind(intent: Intent?): IBinder? = null
@@ -88,6 +93,7 @@ class AlertService : Service() {
             return START_NOT_STICKY
         }
         if (intent?.action == ACTION_ACK) acknowledge()
+        if (intent?.action == ACTION_ANSWER) answer(intent.getBooleanExtra(EXTRA_CALL, false))
         if (socket == null || server != prefs.server) connect()
         return START_STICKY
     }
@@ -180,6 +186,7 @@ class AlertService : Service() {
         if (!red && wasRed) {
             getSystemService(NotificationManager::class.java).cancel(ID_ALERT)
         }
+        s.optJSONObject("escalation")?.let { onEscalation(it) }
         lastState = state
     }
 
@@ -217,6 +224,75 @@ class AlertService : Service() {
             .build()
         n.flags = n.flags or Notification.FLAG_INSISTENT // repeat the sound until someone reacts
         getSystemService(NotificationManager::class.java).notify(ID_ALERT, n)
+    }
+
+    /** After-fall timeline: a question with answer buttons, the countdown, or the call itself. */
+    private fun onEscalation(e: JSONObject) {
+        val state = e.optString("state", "idle")
+        val key = "${e.optDouble("started_at")}/$state"
+        if (key == lastEscKey) return
+        lastEscKey = key
+        val nm = getSystemService(NotificationManager::class.java)
+        if (state !in setOf("asking", "countdown", "called")) {
+            nm.cancel(ID_ESC)
+            return
+        }
+        io.execute { runCatching { fetchEvents() } }
+        val number = e.optString("number", "103")
+        val episode = e.optDouble("started_at").toString()
+        if (MainActivity.visible) { // the page shows the same question and dials by itself
+            return
+        }
+        fun pi(code: Int, i: Intent) = PendingIntent.getService(this, code, i, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+        fun answerIntent(call: Boolean) = Intent(this, AlertService::class.java).setAction(ACTION_ANSWER).putExtra(EXTRA_CALL, call)
+        val open = PendingIntent.getActivity(
+            this, 4, Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                .apply { if (state == "called") putExtra(MainActivity.EXTRA_DIAL_NUMBER, number).putExtra(MainActivity.EXTRA_DIAL_KEY, episode) },
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+        val reason = e.optString("reason")
+        val (title, text) = when (state) {
+            "asking" -> getString(R.string.esc_ask_title) to "Odam yiqildi va turmayapti: $reason. Tez yordam ($number) chaqirilsinmi?"
+            "countdown" -> getString(R.string.esc_countdown_title) to
+                "$reason. ${e.optInt("cancel_seconds", 30)} soniyada bekor qilinmasa, $number chaqiriladi."
+            else -> getString(R.string.esc_called_title) to
+                "Qaror: ${e.optString("called_by")}. $number ga qo'ng'iroq qiling." +
+                (e.optString("address").takeIf { it.isNotBlank() }?.let { " Manzil: $it" } ?: "")
+        }
+        val b = NotificationCompat.Builder(this, CH_ALERT)
+            .setSmallIcon(R.drawable.ic_stat)
+            .setColor(ContextCompat.getColor(this, R.color.bad))
+            .setColorized(true)
+            .setContentTitle(title)
+            .setContentText(text)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(text))
+            .setPriority(NotificationCompat.PRIORITY_MAX)
+            .setCategory(NotificationCompat.CATEGORY_ALARM)
+            .setContentIntent(open)
+            .setFullScreenIntent(open, true)
+        when (state) {
+            "asking" -> b.addAction(0, getString(R.string.esc_yes), pi(5, answerIntent(true)))
+                .addAction(0, getString(R.string.esc_no), pi(6, answerIntent(false)))
+            "countdown" -> b.addAction(0, getString(R.string.esc_now), pi(5, answerIntent(true)))
+                .addAction(0, getString(R.string.esc_cancel), pi(6, answerIntent(false)))
+            else -> b.addAction(0, getString(R.string.esc_dial) + " $number",
+                PendingIntent.getActivity(this, 7, Dialer.intent(this, number), PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE))
+        }
+        val n = b.build()
+        n.flags = n.flags or Notification.FLAG_INSISTENT
+        nm.cancel(ID_ALERT)
+        nm.notify(ID_ESC, n)
+    }
+
+    private fun answer(call: Boolean) {
+        getSystemService(NotificationManager::class.java).cancel(ID_ESC)
+        val body = JSONObject().put("call", call).put("who", prefs.name.ifBlank { "Telefon" }).toString()
+        val req = Request.Builder().url(prefs.url("/api/escalation"))
+            .post(body.toRequestBody("application/json".toMediaType())).build()
+        http.newCall(req).enqueue(object : Callback {
+            override fun onFailure(call: Call, e: IOException) {}
+            override fun onResponse(call: Call, response: Response) = response.close()
+        })
     }
 
     private fun acknowledge() {

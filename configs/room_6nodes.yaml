@@ -1,0 +1,26 @@
+# Example: 6 receiver boards around one room (load with: wfg serve --config configs/room_6nodes.yaml).
+# More boards = more TX->RX WiFi links crossing the room: fewer blind spots for a fall,
+# finer location zones, and fall detection keeps working if one board goes offline.
+# Flash each csi_rx board with its own CONFIG_WFG_NODE_ID (0..5), see docs/hardware.md.
+source: udp
+nodes: [0, 1, 2, 3, 4, 5]
+model: models/classic_6nodes.npz   # trained on simulated data for this layout on first start
+
+escalation:
+  min_nodes_online: 4              # an automatic call needs at least 4 of the 6 boards online
+
+room:
+  name: Yotoqxona (6 plata)
+  size: [4.0, 3.5, 2.7]
+  tx: [0.3, 0.3, 1.2]
+  rx:
+    "0": [3.7, 0.4, 1.0]
+    "1": [3.7, 3.1, 1.0]
+    "2": [0.3, 3.1, 1.0]
+    "3": [2.0, 3.3, 0.4]           # low boards see a person lying on the floor better
+    "4": [3.8, 1.75, 0.4]
+    "5": [2.0, 0.2, 1.0]
+  furniture:
+    - {kind: bed, pos: [3.0, 2.4], size: [1.0, 2.0], rot: 0}
+    - {kind: chair, pos: [0.9, 1.0], size: [0.5, 0.5], rot: 45}
+    - {kind: table, pos: [0.9, 1.7], size: [0.9, 0.6], rot: 0}

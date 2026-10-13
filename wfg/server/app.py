@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import threading
 import time
 from collections import deque
 from contextlib import asynccontextmanager
@@ -12,7 +13,7 @@ from pathlib import Path
 
 from fastapi import Body, FastAPI, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from wfg.collector.hub import CSIHub
@@ -21,6 +22,7 @@ from wfg.config import load_settings
 from wfg.geometry import RoomLayout
 from wfg.inference.analytics import Analytics
 from wfg.inference.engine import Engine
+from wfg.inference.escalation import Escalation, EscalationConfig
 from wfg.inference.events import DetectorConfig
 from wfg.inference.predictor import load_predictor
 from wfg.inference.security import SecurityConfig, SecurityMonitor
@@ -63,6 +65,8 @@ class Runtime:
         self.extra: dict = {"location": None, "vitals": self.analytics.vitals}
         self.security = SecurityMonitor(SecurityConfig(**settings["security"]),
                                         armed=self.store.get_setting("armed") == "1", now=time.time())
+        self.escalation = Escalation(EscalationConfig(**settings["escalation"]))
+        self.snapshot: tuple[float, bytes] | None = None  # latest camera frame (optional add-on)
         self.retention = settings["history_days"] * 86400
         self._last_prune = 0.0
         self.engine = Engine(self.hub, self.predictor, settings["hop_seconds"],
@@ -87,6 +91,10 @@ class Runtime:
         present = latest["activity"] not in ("empty", "unknown")
         for ev in self.security.update(present, now, latest["motion"]):
             self._on_event(ev)
+        online = sum(1 for n in self.hub.stats() if n["online"])
+        for ev in self.escalation.update(latest["state"], now, self.extra["vitals"], online,
+                                         fall_since=self.engine.detector.suspected_at):
+            self._on_event(ev)
         loc, vit = self.extra["location"] or {}, self.extra["vitals"]
         row = {"t": now, "activity": latest["activity"], "state": latest["state"],
                "fall": latest["probs"].get("fall", 0.0), "motion": latest["motion"],
@@ -101,6 +109,43 @@ class Runtime:
     def _on_event(self, ev: dict):
         ev = {**ev, "id": self.store.add_event(ev)}
         self.notifier.notify(ev)
+        if ev["type"] in ("ask_owner", "emergency", "emergency_call"):
+            threading.Thread(target=self._camera, args=(ev,), daemon=True).start()
+        if ev["type"] == "emergency_call" and self.escalation.cfg.call_webhook:
+            threading.Thread(target=self._webhook, args=(ev,), daemon=True).start()
+
+    def _camera(self, ev: dict) -> None:
+        """Optional camera: one frame per escalation step, so the owner can see before deciding."""
+        url = self.settings["camera"].get("snapshot_url")
+        if not url:
+            return
+        try:
+            import httpx
+            r = httpx.get(url, timeout=10)
+            r.raise_for_status()
+            self.snapshot = (ev["t"], r.content)
+            self.notifier.send_photo(r.content, "📷 Kamera surati, " + time.strftime("%H:%M:%S"))
+        except Exception:
+            log.exception("camera snapshot failed")
+
+    def _webhook(self, ev: dict) -> None:
+        try:
+            import httpx
+            httpx.post(self.escalation.cfg.call_webhook, json={k: ev[k] for k in ev if k != "id"}, timeout=15)
+        except Exception:
+            log.exception("call webhook failed")
+
+    def answer_escalation(self, call: bool, who: str) -> dict:
+        for ev in self.escalation.answer(who, call, time.time()):
+            self._on_event(ev)
+        return self.escalation.snapshot()
+
+    def acknowledge(self) -> list[dict]:
+        events = self.engine.acknowledge()
+        for ev in self.escalation.acknowledge(time.time()):
+            self._on_event(ev)
+            events.append(ev)
+        return events
 
     def set_armed(self, armed: bool) -> dict:
         now = time.time()
@@ -110,10 +155,17 @@ class Runtime:
             self._on_event(ev)
         return self.security.snapshot()
 
-    def _command(self, name: str) -> str | None:
+    def _command(self, name: str, who: str = "") -> str | None:
         if name in ("arm", "disarm"):
             self.set_armed(name == "arm")
             return None  # the armed / disarmed event message goes to everyone
+        if name in ("call", "cancel"):
+            if self.escalation.state == "idle":
+                return "Hozir ochiq yiqilish holati yo'q."
+            snap = self.answer_escalation(name == "call", who or "Telegram")
+            if snap["state"] == "asking":
+                return f"Javobingiz qabul qilindi: {snap['approvals']['yes']}/{snap['approvals']['needed']} rozilik."
+            return "Javobingiz qabul qilindi."
         return None
 
     def status(self) -> dict:
@@ -125,6 +177,8 @@ class Runtime:
                 "fall_since": self.engine.detector.suspected_at,
                 "location": self.extra["location"], "vitals": self.extra["vitals"],
                 "security": self.security.snapshot(),
+                "escalation": {**self.escalation.snapshot(), "camera": bool(self.settings["camera"].get("snapshot_url")),
+                               "snapshot_t": self.snapshot[0] if self.snapshot else None},
                 "truth_pos": getattr(self.source, "truth_pos", None),
                 "telegram": {"enabled": self.notifier.enabled, "recipients": len(self.notifier.recipients())},
                 "server_time": time.time()}
@@ -133,7 +187,10 @@ class Runtime:
         s = self.status()
         online = sum(1 for n in s["nodes"] if n["online"])
         sec = {"off": "o'chiq", "arming": "yoqilmoqda", "armed": "yoqilgan", "intrusion": "HARAKAT ANIQLANDI"}
+        esc = {"idle": "yo'q", "observing": "kuzatilmoqda", "asking": "javobingiz kutilmoqda (/call yoki /cancel)",
+               "countdown": "avtomatik chaqiruv sanog'i", "called": "tez yordam chaqirilgan"}
         return (f"Holat: {s['state_uz']}\nFaoliyat: {s['activity_uz']}\n"
+                f"Yiqilish holati: {esc.get(s['escalation']['state'], s['escalation']['state'])}\n"
                 f"Qo'riqlash: {sec.get(s['security']['state'], s['security']['state'])}\n"
                 f"Platalar: {online}/{len(s['nodes'])} onlayn")
 
@@ -209,7 +266,23 @@ def create_app(settings: dict | None = None, config_path: str | None = None, aut
 
     @app.post("/api/ack")
     def ack():
-        return {"events": app.state.rt.engine.acknowledge()}
+        return {"events": app.state.rt.acknowledge()}
+
+    @app.get("/api/escalation")
+    def escalation_get():
+        return app.state.rt.escalation.snapshot()
+
+    @app.post("/api/escalation")
+    def escalation_answer(call: bool = Body(..., embed=True), who: str = Body("Ilova", embed=True)):
+        """Answer to "call an ambulance?": ``call`` true = approve (or call now), false = not needed."""
+        return app.state.rt.answer_escalation(call, who[:40] or "Ilova")
+
+    @app.get("/api/escalation/snapshot")
+    def escalation_snapshot():
+        snap = app.state.rt.snapshot
+        if not snap:
+            return JSONResponse({"detail": "surat yo'q"}, status_code=404)
+        return Response(snap[1], media_type="image/jpeg", headers={"Cache-Control": "no-store"})
 
     @app.post("/api/test-alert")
     def test_alert():

@@ -25,7 +25,8 @@ def train_sim_classic(path: str | Path, rooms=("demo", "sim_a", "sim_b", "sim_c"
     for room in rooms:  # plus sliding windows over continuous scenarios, as the live engine sees them
         records += stream_windows(Room.from_seed(room), rng, n_segments=stream_segments)
         if layout is not None:
-            records += stream_windows(Room.from_seed(room), rng, n_segments=stream_segments // 2, layout=layout)
+            records += stream_windows(Room.from_seed(room, n_nodes=len(layout.rx)), rng,
+                                      n_segments=stream_segments // 2, layout=layout)
     x, y, _, _ = build_arrays(records, "classic")
     model = ClassicModel().fit(x, y)
     model.save(path)

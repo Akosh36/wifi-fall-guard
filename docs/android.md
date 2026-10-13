@@ -8,6 +8,8 @@ Ilova xonaning 3D modelini ko'rsatadi: devorlar, mebel, TX va RX platalar, ular 
 
 Yuqoridagi 🛡 tugmasi **qo'riqlash rejimini** yoqadi: uy egasi uyda bo'lmaganda har qanday harakat qizil xavf signalini beradi. 🕘 tugmasi telefonda saqlangan **tarixni** ochadi; u server bilan aloqa uzilganda ham ko'rinadi. Pastki qatorda nafas, yurak urishi (eksperimental) va taxminiy joylashuv ko'rsatiladi. Batafsil ma'lumot: [security_mode.md](security_mode.md).
 
+Yiqilishdan keyin qizil oynada **vaqt chizig'i** chiqadi: 3 daqiqalik kuzatuv, keyin "Tez yordam chaqirilsinmi?" savoli yoki anomal yurak urishida avtomatik chaqiruv sanog'i. Savolga ilovadan, qulflangan ekrandagi bildirishnomadan yoki Telegramdan javob berish mumkin. Sozlamalarda ismingizni kiriting va xohlasangiz "telefondan o'zi qo'ng'iroq qilsin" ni yoqing. Batafsil: [escalation.md](escalation.md).
+
 Ilova yopiq bo'lsa ham fon xizmati serverni kuzatadi. Yiqilishda to'liq ekranli bildirishnoma keladi, signal to'xtovsiz chalinadi va "Tasdiqlash" tugmasi chiqadi.
 
 > **Muhim:** joylashuv 3 ta WiFi yo'li bo'yicha taxminiy, zona darajasida hisoblanadi. Polda u ko'k doira bilan ko'rsatiladi, doira kattaligi noaniqlikka teng. O'tirganda va yotganda figura stul yoki karavotga boradi. Aniqlik bo'yicha raqamlar [security_mode.md](security_mode.md) da.
