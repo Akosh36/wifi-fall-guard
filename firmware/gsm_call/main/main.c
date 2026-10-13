@@ -376,10 +376,20 @@ static void http_start(void)
 
 /* ---------- WiFi ---------- */
 
+static esp_netif_t *s_netif;
+
 static void wifi_event_handler(void *arg, esp_event_base_t base, int32_t id, void *data)
 {
     if (base == WIFI_EVENT && (id == WIFI_EVENT_STA_START || id == WIFI_EVENT_STA_DISCONNECTED)) {
         esp_wifi_connect();
+    } else if (base == WIFI_EVENT && id == WIFI_EVENT_STA_CONNECTED && strlen(CONFIG_WFG_STATIC_IP) > 0) {
+        /* fixed address, so the server's URL for this board never changes */
+        esp_netif_dhcpc_stop(s_netif);
+        esp_netif_ip_info_t ip = {0};
+        ip.ip.addr = ipaddr_addr(CONFIG_WFG_STATIC_IP);
+        ip.gw.addr = ipaddr_addr(CONFIG_WFG_GATEWAY);
+        ip.netmask.addr = ipaddr_addr("255.255.255.0");
+        ESP_ERROR_CHECK(esp_netif_set_ip_info(s_netif, &ip));
     } else if (base == IP_EVENT && id == IP_EVENT_STA_GOT_IP) {
         ip_event_got_ip_t *e = (ip_event_got_ip_t *)data;
         ESP_LOGI(TAG, "ready: http://" IPSTR "/status  (call_webhook: http://" IPSTR "/call?key=...)",
@@ -391,15 +401,7 @@ static void wifi_init(void)
 {
     ESP_ERROR_CHECK(esp_netif_init());
     ESP_ERROR_CHECK(esp_event_loop_create_default());
-    esp_netif_t *netif = esp_netif_create_default_wifi_sta();
-    if (strlen(CONFIG_WFG_STATIC_IP) > 0) {
-        esp_netif_ip_info_t ip = {0};
-        ip.ip.addr = ipaddr_addr(CONFIG_WFG_STATIC_IP);
-        ip.gw.addr = ipaddr_addr(CONFIG_WFG_GATEWAY);
-        ip.netmask.addr = ipaddr_addr("255.255.255.0");
-        ESP_ERROR_CHECK(esp_netif_dhcpc_stop(netif));
-        ESP_ERROR_CHECK(esp_netif_set_ip_info(netif, &ip));
-    }
+    s_netif = esp_netif_create_default_wifi_sta();
     wifi_init_config_t init = WIFI_INIT_CONFIG_DEFAULT();
     ESP_ERROR_CHECK(esp_wifi_init(&init));
     ESP_ERROR_CHECK(esp_event_handler_register(WIFI_EVENT, ESP_EVENT_ANY_ID, wifi_event_handler, NULL));
