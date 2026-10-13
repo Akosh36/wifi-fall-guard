@@ -99,6 +99,43 @@ Misol sozlama: [`configs/room_6nodes.yaml`](../configs/room_6nodes.yaml). 5 ta p
 
 **Halol baho:** simulyatsiyada 6 ta plata joylashuv aniqligini sezilarli oshirmadi ([security_mode.md](security_mode.md#3-harakat-joylashuvi-eksperimental)). Ularning yiqilishni aniqlashga foydasini real platalarda o'lchash kerak; bu diplom uchun yaxshi tajriba (3 plata va 6 plata).
 
+## 7. Qo'riqlash rejimi: politsiya (102)
+
+Uy egasi uyda bo'lmaganda qo'riqlash rejimi yoqiladi ([security_mode.md](security_mode.md)). Uyda harakat paydo bo'lsa, tizim xuddi shu tartibda politsiyani chaqiradi. Bu yerda ham birinchi harakatdayoq chaqirilmaydi: uyga egasining o'zi qo'riqlashni o'chirishni unutib kirgan, qarindosh kirgan yoki uy hayvoni yurgan bo'lishi mumkin.
+
+```
+harakat ─► darhol egasidan so'rash: "Politsiya (102) chaqirilsinmi?" (+ kamera surati)
+           ├─ "Kerak emas" yoki qo'riqlash o'chirildi ─► yopiladi
+           ├─ "Ha" ─► 102
+           ├─ harakat 60 s davom etdi (kamida 2 plata) ─► 30 s sanoq ─► 102 (har kim bekor qila oladi)
+           └─ harakat davom etmoqda, 3 daqiqa javob yo'q ─► 102
+```
+
+- Harakat to'xtab, xona yana bo'sh bo'lsa, savol ochiq qoladi, lekin odam javobisiz hech kim chaqirilmaydi.
+- Javob berish usullari:
+  - ilovadagi qizil oyna;
+  - qulflangan ekrandagi bildirishnoma;
+  - Telegram tugmalari ("🚓 Ha, chaqiring" va "❌ Kerak emas");
+  - Telegram buyruqlari `/call` va `/cancel`.
+- Qaror qabul qilinganda Telegram'dagi hammaga `🚓 POLITSIYA CHAQIRILDI (102)` xabari boradi. Telefonda "102 ga qo'ng'iroq qilish" tugmasi chiqadi. `call_webhook` sozlangan bo'lsa, server o'sha manzilga `"type": "police_call", "number": "102"` yuboradi.
+- 102 ham favqulodda raqam. Shuning uchun telefon raqamni terib qo'yadi va bitta tugmani bosish kerak bo'ladi. GSM tugunida ham 102 standart holatda bloklangan (`CONFIG_WFG_ALLOW_EMERGENCY`), shunda sinov paytida tasodifan haqiqiy navbatchiga qo'ng'iroq ketmaydi.
+
+Sozlamalar `configs/default.yaml` ning `police` bo'limida:
+
+| Kalit | Standart | Ma'nosi |
+|---|---|---|
+| `auto_call` | true | `false` bo'lsa, "Ha" javobisiz hech qachon chaqirilmaydi |
+| `sustained_seconds` | 60 | Shuncha vaqt to'xtamagan harakat haqiqiy begona odam deb hisoblanadi |
+| `cancel_seconds` | 30 | Avtomatik chaqiruvdan oldingi sanoq |
+| `approvals_required` | 1 | Kerakli "Ha" javoblari soni |
+| `no_answer_seconds` | 180 | Harakat davom etsa va javob bo'lmasa, chaqirish (`0` = hech qachon) |
+| `min_nodes_online` | 2 | Avtomatik qaror uchun kerakli onlayn platalar |
+| `number` | "102" | Politsiya raqami |
+
+API: `GET /api/police` va `POST /api/police {"call": true, "who": "Akosh"}`. Hodisalar: `police_ask`, `police_countdown`, `police_call`, `police_cancelled`.
+
+Ilovadagi demo rejimida 🛡 tugmasini bosing. Bir necha soniyadan keyin "begona odam" kiradi, 20 soniyadan keyin sanoq boshlanadi.
+
 ## Sozlamalar
 
 `configs/default.yaml`, `escalation` bo'limi:

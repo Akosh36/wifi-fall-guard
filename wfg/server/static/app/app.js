@@ -27,8 +27,11 @@ const EVENT_UZ = { fall_suspected: "Yiqilish gumoni", alert: "XAVF: odam turmadi
                    armed: "Qo'riqlash yoqildi", disarmed: "Qo'riqlash o'chirildi",
                    ask_owner: "Tez yordam so'raldi", emergency: "XAVFLI: avtomatik chaqiruv",
                    emergency_call: "Tez yordam chaqirildi", emergency_cancelled: "Chaqiruv bekor qilindi",
-                   resolved: "Odam turdi" };
-const RED_EVENTS = new Set(["fall_suspected", "alert", "intrusion", "emergency", "emergency_call"]);
+                   resolved: "Odam turdi", police_ask: "Politsiya so'raldi",
+                   police_countdown: "XAVFLI: politsiya sanog'i", police_call: "Politsiya chaqirildi",
+                   police_cancelled: "Politsiya chaqirilmadi" };
+const RED_EVENTS = new Set(["fall_suspected", "alert", "intrusion", "emergency", "emergency_call",
+                            "police_ask", "police_countdown", "police_call"]);
 
 // ---------------------------------------------------------------- settings / bridge
 const bridge = window.WFG || null;
@@ -430,7 +433,8 @@ let status = { state: "offline", activity: "unknown", probs: {}, nodes: [] };
 let lastLive = null;   // last status received from the server, kept while offline
 let wasRed = false, muted = false, connected = false;
 
-const isIntrusion = s => s.security?.state === "intrusion";
+// security alarm: movement right now, or the "call the police?" question still open after it stopped
+const isIntrusion = s => s.security?.state === "intrusion" || ["asking", "countdown", "called"].includes(s.police?.state);
 function mode(s) {
   if (RED_STATES.has(s.state) || isIntrusion(s)) return "bad";
   return OFF_STATES.has(s.state) ? "off" : "ok";
@@ -485,8 +489,8 @@ function render(s) {
 
   const red = m === "bad";
   // every new step of the after-fall timeline (question, countdown, call) brings the dialog back
-  const esc = s.escalation || { state: "idle" };
-  const escKey = `${esc.episode}/${esc.state}`;
+  const esc = (isIntrusion(s) ? s.police : s.escalation) || { state: "idle" };
+  const escKey = `${esc.kind}/${esc.episode}/${esc.state}`;
   if (red && esc.state !== "idle" && esc.state !== "observing" && escKey !== render.escKey) muted = false, $("alert").hidden = false;
   render.escKey = escKey;
   if (red && !wasRed) { muted = false; $("alert").hidden = false; }
@@ -494,7 +498,8 @@ function render(s) {
   if (red) {
     if (isIntrusion(s)) {
       $("alertText").textContent = "Uyda harakat aniqlandi! Uyda hech kim bo'lmasligi kerak edi.";
-      $("alertSince").textContent = s.security.since ? `${hhmm(s.security.since)} dan beri` : "";
+      const since = s.police?.started_at || s.security.since;
+      $("alertSince").textContent = since ? `${hhmm(since)} dan beri` : "";
       $("ackBtn").textContent = "Qo'riqlashni o'chirish";
     } else {
       $("alertText").textContent = s.state === "alert" ? "Odam yiqildi va turmayapti!" : "Yiqilish aniqlandi";
@@ -503,7 +508,7 @@ function render(s) {
       $("ackBtn").textContent = "Tasdiqlash: hammasi joyida";
     }
   }
-  renderEscalation(red && !isIntrusion(s) ? esc : { state: "idle" }, s.server_time || Date.now() / 1000);
+  renderEscalation(red ? esc : { state: "idle" }, s.server_time || Date.now() / 1000);
   alarm(red && !muted);
   wasRed = red;
 }
@@ -513,9 +518,16 @@ const mmss = sec => `${Math.floor(sec / 60)}:${String(Math.floor(sec % 60)).padS
 function renderEscalation(e, now) {
   $("esc").hidden = e.state === "idle";
   if (e.state === "idle") return;
-  const number = e.number || "103";
+  const police = e.kind === "police";
+  const number = e.number || (police ? "102" : "103");
+  const who = police ? "Politsiya" : "Tez yordam";
   let fill = 1, text = "";
-  if (e.state === "observing") {
+  if (police && e.state === "asking") {
+    fill = Math.min(1, (now - e.started_at) / (e.sustained_seconds || 60));
+    text = `Uyda begona harakat (${mmss(now - e.started_at)}). Politsiya (${number}) chaqirilsinmi? `
+      + "Uyga o'zingiz yoki tanishingiz kirgan bo'lsa, \"Kerak emas\"ni bosing."
+      + (e.moving ? "" : " Harakat hozir to'xtagan.");
+  } else if (e.state === "observing") {
     const passed = now - e.started_at;
     fill = Math.min(1, passed / e.observe_seconds);
     text = `Kuzatuv: ${mmss(passed)} / ${mmss(e.observe_seconds)}. Odam turmasa, yurak urishi va nafasga qarab qaror qilinadi.`;
@@ -527,15 +539,16 @@ function renderEscalation(e, now) {
   } else if (e.state === "countdown") {
     const left = Math.max(0, e.deadline - now);
     fill = left / (e.cancel_seconds || 30);
-    text = `XAVFLI: ${e.reason}. Tez yordam ${Math.ceil(left)} soniyadan keyin avtomatik chaqiriladi.`;
+    text = `XAVFLI: ${e.reason}. ${who} ${Math.ceil(left)} soniyadan keyin avtomatik chaqiriladi.`;
   } else if (e.state === "called") {
-    text = `Tez yordam (${number}) chaqirildi. Qaror: ${e.called_by}.` + (e.address ? ` Manzil: ${e.address}.` : "");
+    text = `${who} (${number}) chaqirildi. Qaror: ${e.called_by}.` + (e.address ? ` Manzil: ${e.address}.` : "");
     autoDial(e, number);
   }
   $("escFill").style.width = `${Math.round(fill * 100)}%`;
   $("escText").textContent = text;
   $("escAsk").hidden = !["asking", "countdown"].includes(e.state);
-  $("escYes").textContent = e.state === "countdown" ? "🚑 Hozir chaqirish" : "🚑 Ha, chaqiring";
+  const icon = police ? "🚓" : "🚑";
+  $("escYes").textContent = e.state === "countdown" ? `${icon} Hozir chaqirish` : `${icon} Ha, chaqiring`;
   $("escNo").textContent = e.state === "countdown" ? "Bekor qilish" : "Kerak emas";
   const dial = $("escDial");
   dial.hidden = e.state !== "called";
@@ -563,13 +576,14 @@ function renderEscalation(e, now) {
 // the phone itself dials once per episode when the owner enabled it (Android app only)
 function autoDial(e, number) {
   if (!bridge?.autoDial || cfg.demo) return;
-  bridge.autoDial(`${e.started_at}`, number);
+  bridge.autoDial(`${e.kind || "fall"}-${e.started_at}`, number);
 }
 
 async function answerEscalation(call) {
   const who = cfg.name || "Ilova";
-  if (cfg.demo) { demo.answer(call, who); return; }
-  try { status = { ...status, escalation: { ...status.escalation, ...(await post("/api/escalation", { call, who })) } }; render(status); }
+  const key = isIntrusion(status) ? "police" : "escalation";
+  if (cfg.demo) { demo.answer(call, who, key); return; }
+  try { status = { ...status, [key]: { ...status[key], ...(await post(`/api/${key}`, { call, who })) } }; render(status); }
   catch { toast("Server bilan aloqa yo'q: javob yuborilmadi"); }
 }
 $("escYes").onclick = () => answerEscalation(true);
@@ -783,6 +797,29 @@ const demo = (() => {
   // signs (the owner is asked) and an abnormal heart rate (automatic call after a 10 s countdown).
   const OBSERVE = 20, COUNT = 10;
   let falls = 0, esc = { state: "idle" };
+  // security mode: the intruder keeps walking, so after 20 s (60 s on the server) the police countdown starts
+  let pol = { kind: "police", state: "idle" };
+  const plog = (t, text) => pol.timeline.push({ t, text });
+  function police(now) {
+    if (sec.state !== "intrusion") return;
+    if (pol.state === "idle" && !pol.closed) {
+      pol = { kind: "police", state: "asking", episode: now, started_at: now, number: "102", moving: true,
+              sustained_seconds: 20, cancel_seconds: COUNT, approvals: { yes: 0, needed: 1 }, timeline: [] };
+      plog(now, "Uyda begona harakat aniqlandi");
+      plog(now, "Egasidan so'raldi: politsiya (102) chaqirilsinmi?");
+      cache.addEvents([{ t: now, type: "police_ask" }]);
+    }
+    if (pol.state === "asking" && now - pol.started_at >= 20) {
+      Object.assign(pol, { state: "countdown", deadline: now + COUNT, reason: "harakat to'xtamayapti" });
+      plog(now, `Xavfli: harakat to'xtamayapti. ${COUNT} s dan keyin chaqiriladi`);
+      cache.addEvents([{ t: now, type: "police_countdown" }]);
+    }
+    if (pol.state === "countdown" && now >= pol.deadline) {
+      Object.assign(pol, { state: "called", called_by: "avtomatik", deadline: null });
+      plog(now, "Politsiya (102) chaqirildi: avtomatik");
+      cache.addEvents([{ t: now, type: "police_call" }]);
+    }
+  }
   const log = (t, kind, text) => esc.timeline.push({ t, kind, text });
   function escalate(now, heart) {
     if (esc.state === "idle" && !esc.closed) {
@@ -824,7 +861,7 @@ const demo = (() => {
       // the owner left: the room stays empty, then somebody comes in
       activity = sec.state === "armed" && now - sec.since > 8 ? "walk" : "empty";
       if (activity === "walk" && sec.state === "armed") { sec = { state: "intrusion", since: now }; cache.addEvents([{ t: now, type: "intrusion" }]); }
-      if (sec.state === "intrusion") activity = "walk";
+      if (sec.state === "intrusion") { activity = "walk"; police(now); }
     } else if (act === "fall") {
       if (fallAt == null) { fallAt = now; falls++; }
       state = now - fallAt > 8 ? "alert" : "fall_suspected";
@@ -842,6 +879,7 @@ const demo = (() => {
                           heart_bpm: act === "fall" && !(falls % 2) ? 148 + 4 * Math.sin(now / 7) : 71 + 2 * Math.sin(now / 13) } : {},
       security: { ...sec, armed: sec.state !== "off" },
       escalation: esc,
+      police: pol,
     };
     cache.addStatus(status);
     render(status);
@@ -854,8 +892,17 @@ const demo = (() => {
     start() { this.stop(); i = 0; t0 = Date.now() / 1000; fallAt = null; if (!room) buildRoom(DEFAULT_ROOM); timer = setInterval(tick, 500); tick(); },
     stop() { clearInterval(timer); },
     ack() { cache.addEvents([{ t: Date.now() / 1000, type: "acknowledged" }]); next(Date.now() / 1000); },
-    answer(yes, who) {
+    answer(yes, who, key) {
       const now = Date.now() / 1000;
+      if (key === "police") {
+        if (!["asking", "countdown"].includes(pol.state)) return;
+        plog(now, `${who}: ${yes ? "chaqirilsin" : "kerak emas"}`);
+        if (yes) { Object.assign(pol, { state: "called", called_by: who }); plog(now, `Politsiya (102) chaqirildi: ${who}`); }
+        else pol = { ...pol, state: "idle", closed: true };
+        cache.addEvents([{ t: now, type: yes ? "police_call" : "police_cancelled" }]);
+        tick();
+        return;
+      }
       if (esc.state === "idle" || esc.state === "called") return;
       log(now, "answer", `${who}: ${yes ? "chaqirilsin" : "kerak emas"}`);
       if (yes) call(now, who);
@@ -869,6 +916,7 @@ const demo = (() => {
     setArmed(on) {
       const now = Date.now() / 1000;
       sec = on ? { state: "arming", since: now } : { state: "off", since: now };
+      pol = { kind: "police", state: "idle" };
       cache.addEvents([{ t: now, type: on ? "armed" : "disarmed" }]);
       if (!on) { i = 0; t0 = now; }
       tick();

@@ -89,7 +89,7 @@ Batafsil: [docs/architecture.md](docs/architecture.md). Diplomning yozma qismi r
 | Python tizimi (yig'ish, DSP, modellar, moslashish, server, Telegram, veb panel) | Tayyor, testlar bilan |
 | ESP32-S3 proshivkasi | Yozilgan, CI'da ESP-IDF v5.3 bilan kompilyatsiya qilinadi. Haqiqiy platalarda hali sinalmagan |
 | Android ilova (3D xona, alert) | Yozilgan, APK CI'da yig'iladi: [docs/android.md](docs/android.md) |
-| Yiqilishdan keyingi vaqt chizig'i va tez yordam qarori | Yozilgan, testlar bilan: [docs/escalation.md](docs/escalation.md) |
+| Yiqilishdan keyingi vaqt chizig'i, tez yordam (103) va qo'riqlashda politsiya (102) qarori | Yozilgan, testlar bilan: [docs/escalation.md](docs/escalation.md) |
 | Simulyatsiya natijalari | `results/simulated/` (faqat zanjir ishlashini ko'rsatadi, diplom uchun real natija emas) |
 | Real dataset va natijalar | Qurilmalar kelgandan keyin |
 

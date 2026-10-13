@@ -24,6 +24,7 @@ from wfg.inference.analytics import Analytics
 from wfg.inference.engine import Engine
 from wfg.inference.escalation import Escalation, EscalationConfig
 from wfg.inference.events import DetectorConfig
+from wfg.inference.police import PoliceConfig, PoliceEscalation
 from wfg.inference.predictor import load_predictor
 from wfg.inference.security import SecurityConfig, SecurityMonitor
 from wfg.server.db import Store
@@ -66,6 +67,7 @@ class Runtime:
         self.security = SecurityMonitor(SecurityConfig(**settings["security"]),
                                         armed=self.store.get_setting("armed") == "1", now=time.time())
         self.escalation = Escalation(EscalationConfig(**settings["escalation"]))
+        self.police = PoliceEscalation(PoliceConfig(**settings["police"]), address=settings["escalation"]["address"])
         self.snapshot: tuple[float, bytes] | None = None  # latest camera frame (optional add-on)
         self.retention = settings["history_days"] * 86400
         self._last_prune = 0.0
@@ -92,6 +94,8 @@ class Runtime:
         for ev in self.security.update(present, now, latest["motion"]):
             self._on_event(ev)
         online = sum(1 for n in self.hub.stats() if n["online"])
+        for ev in self.police.update(self.security.state, now, online):
+            self._on_event(ev)
         for ev in self.escalation.update(latest["state"], now, self.extra["vitals"], online,
                                          fall_since=self.engine.detector.suspected_at):
             self._on_event(ev)
@@ -109,9 +113,9 @@ class Runtime:
     def _on_event(self, ev: dict):
         ev = {**ev, "id": self.store.add_event(ev)}
         self.notifier.notify(ev)
-        if ev["type"] in ("ask_owner", "emergency", "emergency_call"):
+        if ev["type"] in ("ask_owner", "emergency", "emergency_call", "police_ask", "police_countdown", "police_call"):
             threading.Thread(target=self._camera, args=(ev,), daemon=True).start()
-        if ev["type"] == "emergency_call" and self.escalation.cfg.call_webhook:
+        if ev["type"] in ("emergency_call", "police_call") and self.escalation.cfg.call_webhook:
             threading.Thread(target=self._webhook, args=(ev,), daemon=True).start()
 
     def _camera(self, ev: dict) -> None:
@@ -135,6 +139,11 @@ class Runtime:
         except Exception:
             log.exception("call webhook failed")
 
+    def answer_police(self, call: bool, who: str) -> dict:
+        for ev in self.police.answer(who, call, time.time()):
+            self._on_event(ev)
+        return self.police.snapshot()
+
     def answer_escalation(self, call: bool, who: str) -> dict:
         for ev in self.escalation.answer(who, call, time.time()):
             self._on_event(ev)
@@ -150,6 +159,8 @@ class Runtime:
     def set_armed(self, armed: bool) -> dict:
         now = time.time()
         events = self.security.arm(now) if armed else self.security.disarm(now)
+        if not armed:
+            events = self.police.close(now, "qo'riqlash o'chirildi") + events
         self.store.set_setting("armed", "1" if armed else "0")
         for ev in events:
             self._on_event(ev)
@@ -159,10 +170,15 @@ class Runtime:
         if name in ("arm", "disarm"):
             self.set_armed(name == "arm")
             return None  # the armed / disarmed event message goes to everyone
-        if name in ("call", "cancel"):
-            if self.escalation.state == "idle":
-                return "Hozir ochiq yiqilish holati yo'q."
-            snap = self.answer_escalation(name == "call", who or "Telegram")
+        if name in ("call", "cancel", "police", "nopolice"):
+            # buttons say which question they answer; /call and /cancel go to whichever is open
+            open_states = ("observing", "asking", "countdown")
+            police = name in ("police", "nopolice") or (self.police.state in open_states
+                                                        and self.escalation.state not in open_states)
+            yes = name in ("call", "police")
+            if (self.police if police else self.escalation).state not in open_states:
+                return "Hozir ochiq savol yo'q."
+            snap = (self.answer_police if police else self.answer_escalation)(yes, who or "Telegram")
             if snap["state"] == "asking":
                 return f"Javobingiz qabul qilindi: {snap['approvals']['yes']}/{snap['approvals']['needed']} rozilik."
             return "Javobingiz qabul qilindi."
@@ -177,6 +193,7 @@ class Runtime:
                 "fall_since": self.engine.detector.suspected_at,
                 "location": self.extra["location"], "vitals": self.extra["vitals"],
                 "security": self.security.snapshot(),
+                "police": {**self.police.snapshot(), "snapshot_t": self.snapshot[0] if self.snapshot else None},
                 "escalation": {**self.escalation.snapshot(), "camera": bool(self.settings["camera"].get("snapshot_url")),
                                "snapshot_t": self.snapshot[0] if self.snapshot else None},
                 "truth_pos": getattr(self.source, "truth_pos", None),
@@ -276,6 +293,15 @@ def create_app(settings: dict | None = None, config_path: str | None = None, aut
     def escalation_answer(call: bool = Body(..., embed=True), who: str = Body("Ilova", embed=True)):
         """Answer to "call an ambulance?": ``call`` true = approve (or call now), false = not needed."""
         return app.state.rt.answer_escalation(call, who[:40] or "Ilova")
+
+    @app.get("/api/police")
+    def police_get():
+        return app.state.rt.police.snapshot()
+
+    @app.post("/api/police")
+    def police_answer(call: bool = Body(..., embed=True), who: str = Body("Ilova", embed=True)):
+        """Answer to "call the police?" while the security mode reports an intrusion."""
+        return app.state.rt.answer_police(call, who[:40] or "Ilova")
 
     @app.get("/api/escalation/snapshot")
     def escalation_snapshot():

@@ -39,6 +39,12 @@ MESSAGES = {
     "emergency_call": "🚑 TEZ YORDAM CHAQIRILDI ({number}), {time}. Qaror: {by}.\nSabab: {reason}.{address_line}",
     "emergency_cancelled": "✋ Tez yordam chaqirilmadi: {by}. Kuzatuv davom etmoqda.",
     "resolved": "✅ Odam turdi ({time}). Tez yordam kerak emas.",
+    "police_ask": "🚨 QO'RIQLASH ({time}): uyda begona harakat aniqlandi.\nPolitsiya ({number}) chaqirilsinmi? "
+                  "Uyga o'zingiz yoki tanishingiz kirgan bo'lsa, \"Kerak emas\"ni bosing.",
+    "police_countdown": "🚨 XAVFLI ({time}): {reason}.\n{cancel_s:.0f} soniya ichida hech kim bekor qilmasa, "
+                        "politsiya ({number}) chaqiriladi.",
+    "police_call": "🚓 POLITSIYA CHAQIRILDI ({number}), {time}. Qaror: {by}.\nSabab: {reason}.{address_line}",
+    "police_cancelled": "✋ Politsiya chaqirilmadi: {by}.",
 }
 
 # inline buttons under the "call?" messages; the callback data comes back in handle_update
@@ -47,6 +53,10 @@ CALL_BUTTONS = {
                    {"text": "❌ Kerak emas", "callback_data": "esc:no"}]],
     "emergency": [[{"text": "🚑 Hozir chaqirish", "callback_data": "esc:yes"},
                    {"text": "✋ Bekor qilish", "callback_data": "esc:no"}]],
+    "police_ask": [[{"text": "🚓 Ha, chaqiring", "callback_data": "pol:yes"},
+                    {"text": "❌ Kerak emas", "callback_data": "pol:no"}]],
+    "police_countdown": [[{"text": "🚓 Hozir chaqirish", "callback_data": "pol:yes"},
+                          {"text": "✋ Bekor qilish", "callback_data": "pol:no"}]],
 }
 
 ACTIVITY_UZ = {"empty": "xona bo'sh", "still": "qimirlamayapti", "walk": "yuryapti", "sit": "o'tirdi",
@@ -66,7 +76,8 @@ class TelegramNotifier:
     def __init__(self, token: str | None, store: Store, chat_ids: list[str] | None = None,
                  status_text: Callable[[], str] | None = None,
                  notify_types=("alert", "recovered", "fall_suspected", "intrusion", "intrusion_ended", "armed",
-                               "disarmed", "ask_owner", "emergency", "emergency_call", "emergency_cancelled"),
+                               "disarmed", "ask_owner", "emergency", "emergency_call", "emergency_cancelled",
+                               "police_ask", "police_countdown", "police_call", "police_cancelled"),
                  # "resolved" is not sent: the detector's "recovered" message already says the person got up
                  on_command: Callable[[str, str], str | None] | None = None):
         self.token, self.store = token, store
@@ -171,8 +182,9 @@ class TelegramNotifier:
         name = (q.get("from") or {}).get("first_name") or cid
         allowed = self._allowed(cid)
         reply = None
-        if allowed and q.get("data") in ("esc:yes", "esc:no"):
-            reply = self.on_command("call" if q["data"] == "esc:yes" else "cancel", f"Telegram: {name}")
+        commands = {"esc:yes": "call", "esc:no": "cancel", "pol:yes": "police", "pol:no": "nopolice"}
+        if allowed and q.get("data") in commands:
+            reply = self.on_command(commands[q["data"]], f"Telegram: {name}")
         if self.enabled:
             try:
                 self._api("answerCallbackQuery", callback_query_id=q.get("id"),

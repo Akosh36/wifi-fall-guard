@@ -35,6 +35,12 @@ DEFAULTS = {
         "min_abnormal": 2, "auto_call": True, "cancel_seconds": 30.0, "approvals_required": 1,
         "no_answer_seconds": 600.0, "min_nodes_online": 2, "number": "103", "address": "", "call_webhook": "",
     },
+    # Security mode: from an intrusion to a call to the police (see police.py). The call goes through
+    # escalation.call_webhook as well (the same GSM node), with number 102.
+    "police": {
+        "auto_call": True, "sustained_seconds": 60.0, "cancel_seconds": 30.0, "approvals_required": 1,
+        "no_answer_seconds": 180.0, "min_nodes_online": 2, "number": "102",
+    },
     # Optional camera add-on: a JPEG snapshot URL, fetched only during a fall episode (never streamed).
     "camera": {"snapshot_url": ""},
     # Room layout for the 3D view (metres; x = width, y = depth, z = height).
