@@ -30,6 +30,8 @@ Uy routeridan ham foydalanish mumkin: unda `csi_tx` kerak emas, `csi_rx` sozlama
    - **Node id**: har bir platada boshqacha: 0, 1, 2.
    - **CSI sampling rate**: 100 Hz.
 
+Tezroq yo'l (menuconfig siz, har bir plata bitta buyruq): `python flash_node.py tx --port COM3`, `python flash_node.py rx 0 --port COM4`, ... Batafsil: [docs/hardware_nodes.md](../docs/hardware_nodes.md#4-proshivka-bir-marta-sozlash-keyin-har-bir-plata-1-buyruq).
+
 4. Noutbukni `WFG-NET` tarmog'iga ulang (parol `wfg12345`) va tekshiring:
    ```bash
    wfg nodes

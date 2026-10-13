@@ -34,3 +34,12 @@ jobs:
           cd firmware/${{ matrix.project }}
           idf.py set-target esp32s3
           idf.py build
+      - name: Per-node build script (receiver 5 / transmitter)
+        shell: bash
+        run: |
+          . $IDF_PATH/export.sh
+          if [ "${{ matrix.project }}" = csi_rx ]; then
+            python firmware/flash_node.py rx 5 --server-ip 192.168.4.20 --hz 50 --build-only
+          else
+            python firmware/flash_node.py tx --channel 11 --build-only
+          fi
