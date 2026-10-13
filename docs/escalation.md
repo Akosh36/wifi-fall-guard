@@ -57,7 +57,7 @@ Tez yordam chaqirish qaroriga kelinganda quyidagilar bo'ladi:
 - Sozlamalarda **"telefondan o'zi qo'ng'iroq qilsin"** yoqilgan bo'lsa, telefon qulflangan bo'lsa ham ekran yonadi va raqam teriladi.
 - `call_webhook` sozlangan bo'lsa, server shu manzilga JSON yuboradi (pastda).
 
-> **Muhim cheklov.** Android oddiy ilovalarga favqulodda raqamlarga (103, 112) o'zi qo'ng'iroq qilishga ruxsat bermaydi. Bunday raqamda telefon terish oynasi 103 yozilgan holda ochiladi va bitta tugmani bosish kerak bo'ladi. Oddiy raqamga, masalan qarindoshning raqamiga, qo'ng'iroq to'liq avtomatik ketadi. Odam aralashuvisiz 103 ga qo'ng'iroq qilish uchun alohida GSM modul kerak, pastdagi "Kelgusi ish" bo'limiga qarang.
+> **Muhim cheklov.** Android oddiy ilovalarga favqulodda raqamlarga (103, 112) o'zi qo'ng'iroq qilishga ruxsat bermaydi. Bunday raqamda telefon terish oynasi 103 yozilgan holda ochiladi va bitta tugmani bosish kerak bo'ladi. Oddiy raqamga, masalan qarindoshning raqamiga, qo'ng'iroq to'liq avtomatik ketadi. Odam aralashuvisiz 103 ga qo'ng'iroq qilish uchun alohida LTE modul kerak, pastdagi "Kelgusi ish" bo'limiga qarang.
 
 ### `call_webhook`
 
@@ -69,7 +69,7 @@ Tez yordam chaqirish qarori qabul qilinganda server bu manzilga `POST` so'rov yu
  "vitals": "yurak 148/daq, nafas 14/daq"}
 ```
 
-Shu orqali SMS-shlyuz, SIP-telefoniya yoki GSM modul ulanadi.
+Shu orqali SMS-shlyuz, SIP-telefoniya yoki LTE modul ulanadi. SIM800L tavsiya etilmaydi: u faqat 2G tarmoqda ishlaydi, 2G esa yopilib bormoqda.
 
 ## 5. Qo'shimcha kamera (ixtiyoriy)
 
@@ -93,9 +93,48 @@ Ko'proq plata qo'yilsa, xonani kesib o'tadigan WiFi yo'llari ko'payadi. Bu ikki 
 - yiqilishni ko'rmaydigan "ko'r joylar" kamayadi;
 - bitta plataning batareyasi tugasa yoki u o'chib qolsa, aniqlash qolganlari bilan davom etadi. Server endi o'chgan platani kutib turmaydi.
 
-Misol sozlama: [`configs/room_6nodes.yaml`](../configs/room_6nodes.yaml). Ishga tushirish: `wfg serve --config configs/room_6nodes.yaml`. Har bir `csi_rx` platasiga o'z `CONFIG_WFG_NODE_ID` (0..5) yoziladi ([hardware.md](hardware.md)).
+Misol sozlama: [`configs/room_6nodes.yaml`](../configs/room_6nodes.yaml). 5 ta plata bo'lsa, `nodes: [0, 1, 2, 3, 4]` qoldiring va `room.rx` dan `"5"` ni o'chiring: `nodes` dagi raqamlar va `rx` kalitlari platalardagi `CONFIG_WFG_NODE_ID` bilan bir xil bo'lishi kerak. Ishga tushirish: `wfg serve --config configs/room_6nodes.yaml`. Har bir `csi_rx` platasiga o'z `CONFIG_WFG_NODE_ID` (0..5) yoziladi ([hardware.md](hardware.md)).
+
+**Paket tezligi:** ko'p plata bitta TX dan CSI olganda haqiqiy tezlik 100 Hz dan tushib ketishi mumkin. `wfg nodes` har plata tezligini ko'rsatadi. Tezlik 90 Hz dan past bo'lsa, platalarni 50 Hz ga o'tkazing va sozlamada `fs: 50` qo'ying. Aks holda server oynalarni noto'g'ri vaqt bo'yicha yig'adi.
 
 **Halol baho:** simulyatsiyada 6 ta plata joylashuv aniqligini sezilarli oshirmadi ([security_mode.md](security_mode.md#3-harakat-joylashuvi-eksperimental)). Ularning yiqilishni aniqlashga foydasini real platalarda o'lchash kerak; bu diplom uchun yaxshi tajriba (3 plata va 6 plata).
+
+## 7. Qo'riqlash rejimi: politsiya (102)
+
+Uy egasi uyda bo'lmaganda qo'riqlash rejimi yoqiladi ([security_mode.md](security_mode.md)). Uyda harakat paydo bo'lsa, tizim xuddi shu tartibda politsiyani chaqiradi. Bu yerda ham birinchi harakatdayoq chaqirilmaydi: uyga egasining o'zi qo'riqlashni o'chirishni unutib kirgan, qarindosh kirgan yoki uy hayvoni yurgan bo'lishi mumkin.
+
+```
+harakat ─► darhol egasidan so'rash: "Politsiya (102) chaqirilsinmi?" (+ kamera surati)
+           ├─ "Kerak emas" yoki qo'riqlash o'chirildi ─► yopiladi
+           ├─ "Ha" ─► 102
+           ├─ harakat 60 s davom etdi (kamida 2 plata) ─► 30 s sanoq ─► 102 (har kim bekor qila oladi)
+           └─ harakat davom etmoqda, 3 daqiqa javob yo'q ─► 102
+```
+
+- Harakat to'xtab, xona yana bo'sh bo'lsa, savol ochiq qoladi, lekin odam javobisiz hech kim chaqirilmaydi.
+- Javob berish usullari:
+  - ilovadagi qizil oyna;
+  - qulflangan ekrandagi bildirishnoma;
+  - Telegram tugmalari ("🚓 Ha, chaqiring" va "❌ Kerak emas");
+  - Telegram buyruqlari `/call` va `/cancel`.
+- Qaror qabul qilinganda Telegram'dagi hammaga `🚓 POLITSIYA CHAQIRILDI (102)` xabari boradi. Telefonda "102 ga qo'ng'iroq qilish" tugmasi chiqadi. `call_webhook` sozlangan bo'lsa, server o'sha manzilga `"type": "police_call", "number": "102"` yuboradi.
+- 102 ham favqulodda raqam. Shuning uchun telefon raqamni terib qo'yadi va bitta tugmani bosish kerak bo'ladi. GSM tugunida ham 102 standart holatda bloklangan (`CONFIG_WFG_ALLOW_EMERGENCY`), shunda sinov paytida tasodifan haqiqiy navbatchiga qo'ng'iroq ketmaydi.
+
+Sozlamalar `configs/default.yaml` ning `police` bo'limida:
+
+| Kalit | Standart | Ma'nosi |
+|---|---|---|
+| `auto_call` | true | `false` bo'lsa, "Ha" javobisiz hech qachon chaqirilmaydi |
+| `sustained_seconds` | 60 | Shuncha vaqt to'xtamagan harakat haqiqiy begona odam deb hisoblanadi |
+| `cancel_seconds` | 30 | Avtomatik chaqiruvdan oldingi sanoq |
+| `approvals_required` | 1 | Kerakli "Ha" javoblari soni |
+| `no_answer_seconds` | 180 | Harakat davom etsa va javob bo'lmasa, chaqirish (`0` = hech qachon) |
+| `min_nodes_online` | 2 | Avtomatik qaror uchun kerakli onlayn platalar |
+| `number` | "102" | Politsiya raqami |
+
+API: `GET /api/police` va `POST /api/police {"call": true, "who": "Akosh"}`. Hodisalar: `police_ask`, `police_countdown`, `police_call`, `police_cancelled`.
+
+Ilovadagi demo rejimida 🛡 tugmasini bosing. Bir necha soniyadan keyin "begona odam" kiradi, 20 soniyadan keyin sanoq boshlanadi.
 
 ## Sozlamalar
 
@@ -132,7 +171,7 @@ Hodisalar (`/api/events`): `ask_owner`, `emergency`, `emergency_call`, `emergenc
 
 ## Kelgusi ish (diplom uchun g'oyalar)
 
-- **GSM modul (SIM800L yoki A7670):** ESP32 ga ulanadi va `call_webhook` dan buyruq olib, 103 ga yoki qarindoshga o'zi qo'ng'iroq qiladi hamda SMS yuboradi. Bu tizimni telefonga va internetga bog'liq bo'lmagan qiladi.
+- **LTE modul (SIM7600 yoki A7670E):** ESP32 ga ulanadi va `call_webhook` dan buyruq olib, 103 ga yoki qarindoshga o'zi qo'ng'iroq qiladi hamda SMS yuboradi. Bu tizimni telefonga va internetga bog'liq bo'lmagan qiladi.
 - Yurak urishi o'lchovini pulsoksimetr bilan solishtirib, `heart_low` va `heart_high` chegaralarini real ma'lumot bo'yicha tanlash.
 - Kuzatuv vaqtini (3 daqiqa) odamning yoshi va kasalliklariga qarab sozlash.
 

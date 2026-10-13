@@ -27,6 +27,8 @@ Uy egasi uydan chiqib ketganda rejimni yoqadi. Shundan keyin xonada **har qanday
 3. **XAVF: uyda harakat** — 1.5 soniya davomida odam aniqlansa, holat qizilga o'tadi. Ilovada signal chalinadi, telefonda to'liq ekranli bildirishnoma chiqadi va Telegramga xabar boradi.
 4. 60 soniya xona bo'sh tursa, holat yana "Qo'riqlanmoqda"ga qaytadi. Keyingi harakat yana xavf signalini beradi.
 
+Xavf signali bilan birga egasidan **"Politsiya (102) chaqirilsinmi?"** deb so'raladi. Harakat to'xtamasa, politsiya avtomatik chaqiriladi. Batafsil: [escalation.md](escalation.md#7-qoriqlash-rejimi-politsiya-102).
+
 Rejim holati serverda saqlanadi, shuning uchun server qayta ishga tushganda ham yoqilgan bo'lib qoladi.
 
 **Telegram xavfsizligi:** botni topgan har kim `/start` yuborishi mumkin. Shuning uchun `configs/default.yaml` dagi `telegram.chat_ids` ga o'z chat ID'ingizni yozing. Ro'yxat to'ldirilgan bo'lsa, `/arm` va `/disarm` buyruqlarini faqat shu ID'lar ishlata oladi.
