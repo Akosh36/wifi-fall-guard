@@ -3,7 +3,8 @@
 # finer location zones, and fall detection keeps working if one board goes offline.
 # Flash each csi_rx board with its own CONFIG_WFG_NODE_ID (0..5), see docs/hardware.md.
 source: udp
-nodes: [0, 1, 2, 3, 4, 5]
+nodes: [0, 1, 2, 3, 4, 5]          # must equal each board's CONFIG_WFG_NODE_ID; 5 boards: [0, 1, 2, 3, 4] and drop rx "5"
+fs: 100.0                          # set 50 if `wfg nodes` shows the boards below ~90 Hz and they run at 50 Hz
 model: models/classic_6nodes.npz   # trained on simulated data for this layout on first start
 
 escalation:

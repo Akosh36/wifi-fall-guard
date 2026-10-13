@@ -57,7 +57,7 @@ Tez yordam chaqirish qaroriga kelinganda quyidagilar bo'ladi:
 - Sozlamalarda **"telefondan o'zi qo'ng'iroq qilsin"** yoqilgan bo'lsa, telefon qulflangan bo'lsa ham ekran yonadi va raqam teriladi.
 - `call_webhook` sozlangan bo'lsa, server shu manzilga JSON yuboradi (pastda).
 
-> **Muhim cheklov.** Android oddiy ilovalarga favqulodda raqamlarga (103, 112) o'zi qo'ng'iroq qilishga ruxsat bermaydi. Bunday raqamda telefon terish oynasi 103 yozilgan holda ochiladi va bitta tugmani bosish kerak bo'ladi. Oddiy raqamga, masalan qarindoshning raqamiga, qo'ng'iroq to'liq avtomatik ketadi. Odam aralashuvisiz 103 ga qo'ng'iroq qilish uchun alohida GSM modul kerak, pastdagi "Kelgusi ish" bo'limiga qarang.
+> **Muhim cheklov.** Android oddiy ilovalarga favqulodda raqamlarga (103, 112) o'zi qo'ng'iroq qilishga ruxsat bermaydi. Bunday raqamda telefon terish oynasi 103 yozilgan holda ochiladi va bitta tugmani bosish kerak bo'ladi. Oddiy raqamga, masalan qarindoshning raqamiga, qo'ng'iroq to'liq avtomatik ketadi. Odam aralashuvisiz 103 ga qo'ng'iroq qilish uchun alohida LTE modul kerak, pastdagi "Kelgusi ish" bo'limiga qarang.
 
 ### `call_webhook`
 
@@ -69,7 +69,7 @@ Tez yordam chaqirish qarori qabul qilinganda server bu manzilga `POST` so'rov yu
  "vitals": "yurak 148/daq, nafas 14/daq"}
 ```
 
-Shu orqali SMS-shlyuz, SIP-telefoniya yoki GSM modul ulanadi.
+Shu orqali SMS-shlyuz, SIP-telefoniya yoki LTE modul ulanadi. SIM800L tavsiya etilmaydi: u faqat 2G tarmoqda ishlaydi, 2G esa yopilib bormoqda.
 
 ## 5. Qo'shimcha kamera (ixtiyoriy)
 
@@ -93,7 +93,9 @@ Ko'proq plata qo'yilsa, xonani kesib o'tadigan WiFi yo'llari ko'payadi. Bu ikki 
 - yiqilishni ko'rmaydigan "ko'r joylar" kamayadi;
 - bitta plataning batareyasi tugasa yoki u o'chib qolsa, aniqlash qolganlari bilan davom etadi. Server endi o'chgan platani kutib turmaydi.
 
-Misol sozlama: [`configs/room_6nodes.yaml`](../configs/room_6nodes.yaml). Ishga tushirish: `wfg serve --config configs/room_6nodes.yaml`. Har bir `csi_rx` platasiga o'z `CONFIG_WFG_NODE_ID` (0..5) yoziladi ([hardware.md](hardware.md)).
+Misol sozlama: [`configs/room_6nodes.yaml`](../configs/room_6nodes.yaml). 5 ta plata bo'lsa, `nodes: [0, 1, 2, 3, 4]` qoldiring va `room.rx` dan `"5"` ni o'chiring: `nodes` dagi raqamlar va `rx` kalitlari platalardagi `CONFIG_WFG_NODE_ID` bilan bir xil bo'lishi kerak. Ishga tushirish: `wfg serve --config configs/room_6nodes.yaml`. Har bir `csi_rx` platasiga o'z `CONFIG_WFG_NODE_ID` (0..5) yoziladi ([hardware.md](hardware.md)).
+
+**Paket tezligi:** ko'p plata bitta TX dan CSI olganda haqiqiy tezlik 100 Hz dan tushib ketishi mumkin. `wfg nodes` har plata tezligini ko'rsatadi. Tezlik 90 Hz dan past bo'lsa, platalarni 50 Hz ga o'tkazing va sozlamada `fs: 50` qo'ying. Aks holda server oynalarni noto'g'ri vaqt bo'yicha yig'adi.
 
 **Halol baho:** simulyatsiyada 6 ta plata joylashuv aniqligini sezilarli oshirmadi ([security_mode.md](security_mode.md#3-harakat-joylashuvi-eksperimental)). Ularning yiqilishni aniqlashga foydasini real platalarda o'lchash kerak; bu diplom uchun yaxshi tajriba (3 plata va 6 plata).
 
@@ -132,7 +134,7 @@ Hodisalar (`/api/events`): `ask_owner`, `emergency`, `emergency_call`, `emergenc
 
 ## Kelgusi ish (diplom uchun g'oyalar)
 
-- **GSM modul (SIM800L yoki A7670):** ESP32 ga ulanadi va `call_webhook` dan buyruq olib, 103 ga yoki qarindoshga o'zi qo'ng'iroq qiladi hamda SMS yuboradi. Bu tizimni telefonga va internetga bog'liq bo'lmagan qiladi.
+- **LTE modul (SIM7600 yoki A7670E):** ESP32 ga ulanadi va `call_webhook` dan buyruq olib, 103 ga yoki qarindoshga o'zi qo'ng'iroq qiladi hamda SMS yuboradi. Bu tizimni telefonga va internetga bog'liq bo'lmagan qiladi.
 - Yurak urishi o'lchovini pulsoksimetr bilan solishtirib, `heart_low` va `heart_high` chegaralarini real ma'lumot bo'yicha tanlash.
 - Kuzatuv vaqtini (3 daqiqa) odamning yoshi va kasalliklariga qarab sozlash.
 
