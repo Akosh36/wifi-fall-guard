@@ -6,7 +6,10 @@ import android.app.Activity
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
+import android.view.View
 import android.view.WindowInsets
+import android.webkit.WebChromeClient
+import android.widget.LinearLayout
 import android.webkit.JavascriptInterface
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
@@ -29,6 +32,7 @@ class MainActivity : Activity() {
     }
 
     private lateinit var web: WebView
+    private lateinit var statusSpacer: View
     private lateinit var prefs: Prefs
 
     @SuppressLint("SetJavaScriptEnabled")
@@ -47,24 +51,39 @@ class MainActivity : Activity() {
             settings.mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
             setBackgroundColor(getColor(R.color.bg))
             addJavascriptInterface(Bridge(), "WFG")
+            webChromeClient = WebChromeClient() // lets the page use alert() / confirm()
             webViewClient = object : WebViewClient() {
                 override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? =
                     assets.shouldInterceptRequest(request.url)
             }
         }
-        // keep the page out from under the status and navigation bars (edge-to-edge on Android 15)
-        web.setOnApplyWindowInsetsListener { v, insets ->
+        // Android 15 draws apps edge-to-edge: keep the page between the status bar (clock, network,
+        // battery) and the navigation bar, with spacers in their place. The top one takes the page's
+        // header colour (green / red) through the bridge.
+        statusSpacer = View(this).apply { setBackgroundColor(getColor(R.color.ok)) }
+        val navSpacer = View(this).apply { setBackgroundColor(getColor(R.color.bg)) }
+        val root = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setBackgroundColor(getColor(R.color.bg))
+            addView(statusSpacer, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0))
+            addView(web, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
+            addView(navSpacer, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0))
+        }
+        root.setOnApplyWindowInsetsListener { v, insets ->
             val bars = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                insets.getInsets(WindowInsets.Type.systemBars()).let { intArrayOf(it.left, it.top, it.right, it.bottom) }
+                insets.getInsets(WindowInsets.Type.systemBars() or WindowInsets.Type.displayCutout())
+                    .let { intArrayOf(it.left, it.top, it.right, it.bottom) }
             } else {
                 @Suppress("DEPRECATION")
                 intArrayOf(insets.systemWindowInsetLeft, insets.systemWindowInsetTop,
                     insets.systemWindowInsetRight, insets.systemWindowInsetBottom)
             }
-            v.setPadding(bars[0], bars[1], bars[2], bars[3])
+            v.setPadding(bars[0], 0, bars[2], 0)
+            statusSpacer.layoutParams = statusSpacer.layoutParams.apply { height = bars[1] }
+            navSpacer.layoutParams = navSpacer.layoutParams.apply { height = bars[3] }
             insets
         }
-        setContentView(web)
+        setContentView(root)
         if (savedInstanceState == null) web.loadUrl(START_URL) else web.restoreState(savedInstanceState)
 
         if (Build.VERSION.SDK_INT >= 33 &&
@@ -119,6 +138,14 @@ class MainActivity : Activity() {
             prefs.token = token
             runOnUiThread {
                 if (prefs.monitoring) AlertService.start(this@MainActivity) else AlertService.stop(this@MainActivity)
+            }
+        }
+
+        /** Colour of the strip behind the status bar, so it continues the page header. */
+        @JavascriptInterface
+        fun setBarColor(color: String) {
+            runCatching { android.graphics.Color.parseColor(color) }.onSuccess { c ->
+                runOnUiThread { statusSpacer.setBackgroundColor(c) }
             }
         }
 

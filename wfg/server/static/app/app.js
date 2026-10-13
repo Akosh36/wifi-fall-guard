@@ -462,6 +462,8 @@ function render(s) {
   $("stateText").textContent = title;
   $("subText").textContent = sub;
   $("shieldBtn").classList.toggle("on", sec !== "off");
+  const barColor = { ok: "#1fbf6a", bad: "#e5322d", off: "#4a5058" }[m];
+  if (bridge?.setBarColor && barColor !== render.bar) { bridge.setBarColor(barColor); render.bar = barColor; }
   $("shieldBtn").setAttribute("aria-pressed", sec !== "off");
 
   $("activity").textContent = isIntrusion(s) ? "Begona harakat" : (ACTIVITY_UZ[RED_STATES.has(s.state) ? "fall" : s.activity] || s.activity || "—");
@@ -524,6 +526,17 @@ async function setArmed(armed) {
   try { status = { ...status, security: await post("/api/security", { armed }) }; render(status); }
   catch { toast("Server bilan aloqa yo'q: rejim o'zgarmadi"); }
 }
+// in-page confirmation: the native confirm() is not reliable inside an Android WebView
+function ask(text, yes) {
+  $("askText").textContent = text;
+  $("askYes").textContent = yes;
+  $("ask").hidden = false;
+  return new Promise(resolve => {
+    const done = ok => { $("ask").hidden = true; resolve(ok); };
+    $("askYes").onclick = () => done(true);
+    $("askNo").onclick = () => done(false);
+  });
+}
 function toast(text) {
   const t = $("toast");
   t.textContent = text; t.hidden = false;
@@ -540,7 +553,8 @@ $("ackBtn").onclick = async () => {
 };
 $("shieldBtn").onclick = () => {
   const armed = (status.security?.state || "off") !== "off";
-  if (!armed || confirm("Qo'riqlash rejimini o'chirasizmi?")) setArmed(!armed);
+  if (!armed) { setArmed(true); return; }
+  ask("Qo'riqlash rejimini o'chirasizmi?", "O'chirish").then(ok => { if (ok) setArmed(false); });
 };
 $("settingsBtn").onclick = () => {
   $("serverInput").value = cfg.server; $("tokenInput").value = cfg.token; $("demoInput").checked = cfg.demo;
