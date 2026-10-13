@@ -13,13 +13,17 @@
  *      and keeps the line open, so with a speaker and microphone on the modem
  *      the person on the floor can talk to the dispatcher.
  *
+ * Guard mode sends the same request with "type": "police_call" / "kind":
+ * "police" (number 102). Then the SMS says it is a break-in and the number is
+ * CONFIG_WFG_POLICE_NUMBER, else the one in the request.
+ *
  * It works without the phone app and without internet: only the local WiFi
  * between server and board, and the GSM network.
  *
  * Emergency numbers are blocked unless CONFIG_WFG_ALLOW_EMERGENCY is on, so a
  * test can never reach a real dispatcher.
  *
- * Endpoints:  POST /call?key=..   GET /status   POST /test?key=..&to=+998...
+ * Endpoints:  POST /call?key=..  (fall or police)   GET /status   POST /test?key=..&to=+998...
  */
 #include <ctype.h>
 #include <math.h>
@@ -62,7 +66,7 @@ static QueueHandle_t s_jobs;
 static volatile int s_csq = -1;          /* signal quality 0..31, 99 = unknown */
 static volatile bool s_registered;
 static char s_last[96] = "none";
-static int64_t s_last_job_us = -1000000000LL;
+static int64_t s_last_job_us[2] = {-1000000000LL, -1000000000LL}; /* [0] fall, [1] police */
 
 /* ---------- modem (AT commands) ---------- */
 
@@ -284,24 +288,30 @@ static esp_err_t call_post(httpd_req_t *req)
     }
     body[got] = 0;
 
-    /* the server re-sends on retries: one call per 2 minutes is enough */
-    if (esp_timer_get_time() - s_last_job_us < 120LL * 1000000) {
+    job_t job = {0};
+    cJSON *j = cJSON_Parse(body);
+    const char *type = cJSON_GetStringValue(cJSON_GetObjectItem(j, "type"));
+    const char *kind = cJSON_GetStringValue(cJSON_GetObjectItem(j, "kind"));
+    bool police = (kind && strcmp(kind, "police") == 0) || (type && strcmp(type, "police_call") == 0);
+
+    /* one call per kind per 2 minutes: a repeated request is not a new emergency */
+    if (esp_timer_get_time() - s_last_job_us[police] < 120LL * 1000000) {
+        cJSON_Delete(j);
         httpd_resp_sendstr(req, "{\"ok\":true,\"duplicate\":true}");
         return ESP_OK;
     }
-
-    job_t job = {0};
-    cJSON *j = cJSON_Parse(body);
     const char *num = cJSON_GetStringValue(cJSON_GetObjectItem(j, "number"));
     const char *reason = cJSON_GetStringValue(cJSON_GetObjectItem(j, "reason"));
     const char *address = cJSON_GetStringValue(cJSON_GetObjectItem(j, "address"));
     const char *vitals = cJSON_GetStringValue(cJSON_GetObjectItem(j, "vitals"));
     double down = cJSON_GetNumberValue(cJSON_GetObjectItem(j, "down_min"));
 
-    strlcpy(job.number, CONFIG_WFG_CALL_NUMBER[0] ? CONFIG_WFG_CALL_NUMBER : (num ? num : ""), sizeof(job.number));
-    sms_append(job.text, "WiFi Fall Guard: YIQILISH, yordam kerak! ");
+    const char *fixed = police ? CONFIG_WFG_POLICE_NUMBER : CONFIG_WFG_CALL_NUMBER;
+    strlcpy(job.number, fixed[0] ? fixed : (num ? num : ""), sizeof(job.number));
+    sms_append(job.text, police ? "WiFi Fall Guard: QO'RIQLASH, uyda begona odam! "
+                                : "WiFi Fall Guard: YIQILISH, yordam kerak! ");
     sms_append(job.text, reason);
-    if (!isnan(down)) {
+    if (!police && !isnan(down)) {
         char tmp[32];
         snprintf(tmp, sizeof(tmp), ". Yerda %.0f daq", down);
         sms_append(job.text, tmp);
@@ -320,8 +330,8 @@ static esp_err_t call_post(httpd_req_t *req)
         httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "busy");
         return ESP_OK;
     }
-    s_last_job_us = esp_timer_get_time();
-    ESP_LOGW(TAG, "EMERGENCY request: call %s, SMS \"%s\"", job.number, job.text);
+    s_last_job_us[police] = esp_timer_get_time();
+    ESP_LOGW(TAG, "%s request: call %s, SMS \"%s\"", police ? "POLICE" : "EMERGENCY", job.number, job.text);
     httpd_resp_set_type(req, "application/json");
     httpd_resp_sendstr(req, "{\"ok\":true}");
     return ESP_OK;

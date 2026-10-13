@@ -179,7 +179,7 @@ Muammolar jadvali: [firmware/README.md](../firmware/README.md#muammolar).
 
 ## 7. GSM plata: ulash, proshivka, tekshirish
 
-Server qo'ng'iroq qarorini qabul qilganda ([escalation.md](escalation.md)) `call_webhook` manziliga so'rov yuboradi. Bu plata uni qabul qilib: (1) qarindoshlarga SMS (sabab, yerda qancha vaqt, yurak/nafas, manzil) yuboradi, (2) raqamga qo'ng'iroq qiladi va liniyani 3 daqiqa ochiq ushlaydi. Internet ham, telefon ham kerak emas, faqat uydagi WiFi va GSM tarmoq.
+Server qo'ng'iroq qarorini qabul qilganda ([escalation.md](escalation.md)) `call_webhook` manziliga so'rov yuboradi. Qo'riqlash rejimida begona odam aniqlanganda ham (politsiya, 102) xuddi shu manzilga so'rov keladi: unda SMS "QO'RIQLASH, uyda begona odam!" bilan boshlanadi va qo'ng'iroq **Police number** sozlamasidagi raqamga (bo'sh bo'lsa serverdan kelgan 102 ga) ketadi. Bu plata uni qabul qilib: (1) qarindoshlarga SMS (sabab, yerda qancha vaqt, yurak/nafas, manzil) yuboradi, (2) raqamga qo'ng'iroq qiladi va liniyani 3 daqiqa ochiq ushlaydi. Internet ham, telefon ham kerak emas, faqat uydagi WiFi va GSM tarmoq.
 
 ### Ulash
 
@@ -210,7 +210,7 @@ idf.py menuconfig      # "WiFi Fall Guard GSM caller"
 idf.py build flash monitor
 ```
 
-`menuconfig` da: **Secret key** (o'zingizniki), **SMS recipients** (`+998901234567,+998931234567`), **Number to call** (sinovda o'z raqamingiz). **Allow calling emergency numbers** standart holatda **o'chiq**: sinov paytida 103 ga tasodifan qo'ng'iroq ketmaydi. Uni faqat hammasi sinalgandan keyin yoqing. Plata `192.168.4.30` manzilida ishlaydi (o'zgartirish mumkin).
+`menuconfig` da: **Secret key** (o'zingizniki), **SMS recipients** (`+998901234567,+998931234567`), **Number to call** (yiqilish uchun, sinovda o'z raqamingiz), **Police number** (qo'riqlash uchun, sinovda ham o'z raqamingiz). **Allow calling emergency numbers** standart holatda **o'chiq**: sinov paytida 103 ga tasodifan qo'ng'iroq ketmaydi. Uni faqat hammasi sinalgandan keyin yoqing. Plata `192.168.4.30` manzilida ishlaydi (o'zgartirish mumkin).
 
 Server sozlamasi (`configs/default.yaml`):
 

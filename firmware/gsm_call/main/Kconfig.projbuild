@@ -47,6 +47,14 @@ config WFG_CALL_NUMBER
     help
         For testing put a relative's number here.
 
+config WFG_POLICE_NUMBER
+    string "Number to call for a guard-mode (police) alarm (empty = the number the server sends, normally 102)"
+    default ""
+    help
+        CONFIG_WFG_CALL_NUMBER is not used for police calls, so a test
+        number for falls never redirects a burglary alarm. For testing put
+        your own number here.
+
 config WFG_ALLOW_EMERGENCY
     bool "Allow calling emergency numbers (101-104, 112)"
     default n
