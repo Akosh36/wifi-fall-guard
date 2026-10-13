@@ -56,7 +56,7 @@ void app_main(void)
     strlcpy((char *)cfg.ap.password, CONFIG_WFG_AP_PASSWORD, sizeof(cfg.ap.password));
     cfg.ap.ssid_len = strlen(CONFIG_WFG_AP_SSID);
     cfg.ap.channel = CONFIG_WFG_AP_CHANNEL;
-    cfg.ap.max_connection = 8;
+    cfg.ap.max_connection = 10; /* up to 6 receivers + GSM + camera + laptop + phone */
     cfg.ap.authmode = strlen(CONFIG_WFG_AP_PASSWORD) >= 8 ? WIFI_AUTH_WPA2_PSK : WIFI_AUTH_OPEN;
     cfg.ap.beacon_interval = 100;
 

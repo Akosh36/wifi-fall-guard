@@ -23,7 +23,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        project: [csi_rx, csi_tx]
+        project: [csi_rx, csi_tx, gsm_call, camera]
     container: espressif/idf:v5.3.1
     steps:
       - uses: actions/checkout@v4
@@ -38,8 +38,8 @@ jobs:
         shell: bash
         run: |
           . $IDF_PATH/export.sh
-          if [ "${{ matrix.project }}" = csi_rx ]; then
-            python firmware/flash_node.py rx 5 --server-ip 192.168.4.20 --hz 50 --build-only
-          else
-            python firmware/flash_node.py tx --channel 11 --build-only
-          fi
+          case "${{ matrix.project }}" in
+            csi_rx) python firmware/flash_node.py rx 5 --server-ip 192.168.4.20 --hz 50 --build-only ;;
+            csi_tx) python firmware/flash_node.py tx --channel 11 --build-only ;;
+            *) echo "no per-node build for ${{ matrix.project }}" ;;
+          esac

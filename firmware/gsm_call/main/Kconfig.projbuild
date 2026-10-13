@@ -1,0 +1,62 @@
+menu "WiFi Fall Guard GSM caller"
+
+config WFG_WIFI_SSID
+    string "WiFi SSID (same network as the server)"
+    default "WFG-NET"
+
+config WFG_WIFI_PASSWORD
+    string "WiFi password"
+    default "wfg12345"
+
+config WFG_STATIC_IP
+    string "Fixed IP address (empty = DHCP)"
+    default "192.168.4.30"
+    help
+        The server calls http://<this address>/call?key=..., so the address
+        should not change. 192.168.4.30 suits the csi_tx network (WFG-NET).
+        For a home router pick a free address in its range, or leave empty
+        and reserve one in the router.
+
+config WFG_GATEWAY
+    string "Gateway for the fixed IP"
+    default "192.168.4.1"
+
+config WFG_KEY
+    string "Secret key (must match ?key= in escalation.call_webhook)"
+    default "change-me"
+
+config WFG_MODEM_TX_GPIO
+    int "ESP32 TX pin -> modem RXD"
+    default 17
+
+config WFG_MODEM_RX_GPIO
+    int "ESP32 RX pin <- modem TXD"
+    default 18
+
+config WFG_MODEM_BAUD
+    int "Modem UART baud rate"
+    default 115200
+
+config WFG_SMS_NUMBERS
+    string "SMS recipients, comma separated (relatives), e.g. +998901234567,+998931234567"
+    default ""
+
+config WFG_CALL_NUMBER
+    string "Number to call (empty = the number the server sends, normally 103)"
+    default ""
+    help
+        For testing put a relative's number here.
+
+config WFG_ALLOW_EMERGENCY
+    bool "Allow calling emergency numbers (101-104, 112)"
+    default n
+    help
+        Off by default so that tests never reach real dispatchers. Turn on
+        only for the finished installation.
+
+config WFG_CALL_SECONDS
+    int "How long to keep the call open (seconds)"
+    range 10 900
+    default 180
+
+endmenu
