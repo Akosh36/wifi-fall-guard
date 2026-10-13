@@ -47,6 +47,17 @@
     <h1>XAVF</h1>
     <p id="alertText">Yiqilish aniqlandi</p>
     <p class="since" id="alertSince"></p>
+    <div id="esc" class="esc" hidden>
+      <div class="escbar"><div id="escFill"></div></div>
+      <p id="escText"></p>
+      <img id="escPhoto" alt="Kamera surati" hidden>
+      <div id="escAsk" class="escask" hidden>
+        <button id="escYes" class="primary">🚑 Ha, chaqiring</button>
+        <button id="escNo" class="ghost">Kerak emas</button>
+      </div>
+      <a id="escDial" class="dial" href="tel:103" hidden>📞 103 ga qo'ng'iroq qilish</a>
+      <ol id="escTimeline"></ol>
+    </div>
     <button id="ackBtn" class="primary">Tasdiqlash: hammasi joyida</button>
     <button id="muteBtn" class="ghost">Ovozni o'chirish</button>
   </div>
@@ -60,6 +71,9 @@
     <label for="tokenInput">Token (server parolli bo'lsa)</label>
     <input id="tokenInput" type="password" autocomplete="off" placeholder="bo'sh qoldirish mumkin">
     <p class="hint">Kompyuterda <code>wfg serve</code> yoki <code>wfg demo</code> ishga tushiring, telefon shu WiFi tarmog'ida bo'lsin.</p>
+    <label for="nameInput">Ismingiz (tez yordam qarorida ko'rinadi)</label>
+    <input id="nameInput" type="text" autocomplete="off" placeholder="masalan: Akosh">
+    <label class="row"><input id="dialInput" type="checkbox"> Tez yordam chaqirilganda shu telefondan o'zi qo'ng'iroq qilsin</label>
     <label class="row"><input id="demoInput" type="checkbox"> Demo rejimi (serversiz, sun'iy ma'lumot)</label>
     <div class="actions">
       <button id="saveBtn" class="primary">Saqlash</button>

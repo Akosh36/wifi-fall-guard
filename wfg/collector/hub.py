@@ -15,7 +15,7 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
-from wfg.csi.packet import N_SUBCARRIERS, CSIPacket
+from wfg.csi.packet import CSIPacket
 
 
 @dataclass
@@ -82,33 +82,54 @@ class CSIHub:
             ts = [b.times[-1] for b in self.nodes.values() if b.times]
         return min(ts) if ts else 0.0
 
-    def window(self, seconds: float, end: float | None = None) -> np.ndarray | None:
+    def window(self, seconds: float, end: float | None = None, partial: bool = False) -> np.ndarray | None:
         """(nodes, T, 52) complex window on a uniform grid, or None if a node lacks data.
 
         Uses the nearest earlier sample (zero-order hold) for every grid point, so
         a few lost packets are tolerated; gaps longer than 0.2 s make it fail.
+        With ``partial`` a silent node is left out instead (4-6 boards: one flat
+        battery must not stop fall detection); None only when no node has data.
         """
         n = int(round(seconds * self.fs))
-        end = self.latest_time() if end is None else end
+        end = self._latest_time(partial) if end is None else end
         if not end:
             return None
         grid = end - (n - 1 - np.arange(n)) / self.fs
-        out = np.zeros((len(self.node_ids()), n, N_SUBCARRIERS), dtype=np.complex64)
+        rows = []
         with self._lock:
-            for i, nid in enumerate(self.node_ids()):
-                buf = self.nodes.get(nid)
-                if buf is None or len(buf.times) < 2:
+            for nid in self.node_ids():
+                row = self._resample(self.nodes.get(nid), grid)
+                if row is None and not partial:
                     return None
-                t = np.fromiter(buf.times, dtype=np.float64)
-                if t[0] > grid[0] or t[-1] < grid[-1] - 0.2:
-                    return None
-                idx = np.clip(np.searchsorted(t, grid, side="right") - 1, 0, len(t) - 1)
-                if np.max(grid - t[idx]) > 0.2:
-                    return None
-                start = int(idx[0])
-                data = np.asarray([buf.csi[j] for j in range(start, int(idx[-1]) + 1)])
-                out[i] = data[idx - start]
-        return out
+                if row is not None:
+                    rows.append(row)
+        if not rows:
+            return None
+        return np.stack(rows).astype(np.complex64)
+
+    def _latest_time(self, partial: bool) -> float:
+        if not partial:
+            return self.latest_time()
+        # newest time all *live* nodes have reached; a node silent for over 2 s does not hold the others back
+        with self._lock:
+            ts = [b.times[-1] for b in self.nodes.values() if b.times]
+        if not ts:
+            return 0.0
+        return min(t for t in ts if t > max(ts) - 2.0)
+
+    @staticmethod
+    def _resample(buf, grid: np.ndarray) -> np.ndarray | None:
+        if buf is None or len(buf.times) < 2:
+            return None
+        t = np.fromiter(buf.times, dtype=np.float64)
+        if t[0] > grid[0] or t[-1] < grid[-1] - 0.2:
+            return None
+        idx = np.clip(np.searchsorted(t, grid, side="right") - 1, 0, len(t) - 1)
+        if np.max(grid - t[idx]) > 0.2:
+            return None
+        start = int(idx[0])
+        data = np.asarray([buf.csi[j] for j in range(start, int(idx[-1]) + 1)])
+        return data[idx - start]
 
     def stats(self) -> list[dict]:
         now = time.time()

@@ -18,6 +18,21 @@ class Prefs(context: Context) {
         get() = sp.getBoolean("demo", false)
         set(v) = sp.edit().putBoolean("demo", v).apply()
 
+    /** Name shown on the server when this phone answers "call an ambulance?". */
+    var name: String
+        get() = sp.getString("name", "") ?: ""
+        set(v) = sp.edit().putString("name", v).apply()
+
+    /** Dial the ambulance from this phone as soon as the server decides to call. */
+    var autoDial: Boolean
+        get() = sp.getBoolean("auto_dial", false)
+        set(v) = sp.edit().putBoolean("auto_dial", v).apply()
+
+    /** Episode already dialled for, so one fall never makes two calls. */
+    var dialedKey: String
+        get() = sp.getString("dialed", "") ?: ""
+        set(v) = sp.edit().putString("dialed", v).apply()
+
     /** Server URL for ``path`` with the API token, if one is set. */
     fun url(path: String): String {
         val sep = if ('?' in path) "&" else "?"

@@ -105,6 +105,8 @@ def cmd_serve(a, demo: bool = False):
     if demo:
         s["source"] = "sim"
         s["sim"]["speed"] = a.speed
+        # the demo scenario lies on the floor for ~40 s, so the 3-minute observation is shortened to show the question
+        s["escalation"]["observe_seconds"] = min(s["escalation"]["observe_seconds"], 25.0)
     if getattr(a, "source", None):
         s["source"] = a.source
     if getattr(a, "model", None):

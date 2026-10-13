@@ -42,7 +42,7 @@ class Engine:
 
     def step(self, now: float | None = None) -> dict | None:
         """One inference step; public so tests and offline replays can drive it directly."""
-        win = self.hub.window(self.predictor.window_seconds)
+        win = self.hub.window(self.predictor.window_seconds, partial=True)  # survives a dead board
         if win is None:
             with self._lock:
                 self.latest = {**self.latest, "state": "waiting_for_nodes"}

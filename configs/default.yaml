@@ -40,6 +40,29 @@ security:              # home security mode ("Qo'riqlash")
 
 history_days: 7        # status history kept on the server (for the app's offline view)
 
+# What happens after a fall (docs/escalation.md). The server never calls for help straight away:
+#   1. watch for observe_seconds whether the person gets up, measure breathing and heart rate;
+#   2. still down + abnormal vital signs -> automatic call after cancel_seconds (anyone may cancel);
+#      still down + normal / unknown vital signs -> ask the owner "Call an ambulance?" (app + Telegram).
+escalation:
+  observe_seconds: 180       # 3 minutes
+  heart_low: 45              # beats / min outside this range are abnormal
+  heart_high: 130
+  breath_low: 8              # breaths / min outside this range are abnormal
+  breath_high: 30
+  min_abnormal: 2            # abnormal readings needed before acting on them
+  auto_call: true            # false = always ask a person first
+  cancel_seconds: 30         # countdown before the automatic call
+  approvals_required: 1      # "yes" answers needed when vital signs are normal (owner, relatives)
+  no_answer_seconds: 600     # nobody answered the question -> call; 0 = never call without an answer
+  min_nodes_online: 2        # with fewer boards online the system never decides on its own
+  number: "103"              # tez yordam
+  address: ""                # home address, sent with the call message
+  call_webhook: ""           # optional: URL of a SIP / SMS gateway, gets a JSON POST when a call is decided
+
+camera:                      # optional add-on; a snapshot is taken only during a fall episode
+  snapshot_url: ""           # e.g. http://192.168.1.20/snapshot.jpg (IP camera JPEG URL)
+
 # Room layout for the 3D view in the Android app and on /app (metres).
 # x = width, y = depth, z = height. Measure your room and the board positions.
 room:

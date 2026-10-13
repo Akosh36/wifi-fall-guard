@@ -94,3 +94,20 @@ body.bad .plabel { border-color: var(--bad); background: var(--bad); }
 #histEvents li.red { color: #b3221e; font-weight: 600; }
 .toast { position: fixed; left: 16px; right: 16px; bottom: calc(env(safe-area-inset-bottom) + 110px); background: #1b2420; color: #fff; padding: 12px 14px; border-radius: 10px; text-align: center; z-index: 20; }
 .toast[hidden] { display: none; }
+
+/* after-fall timeline inside the red alert card */
+.esc { text-align: left; margin-top: 10px; }
+.escbar { height: 8px; border-radius: 4px; background: rgba(255,255,255,.25); overflow: hidden; }
+#escFill { height: 100%; width: 0; background: #fff; transition: width .5s linear; }
+.esc p { font-size: 15px; }
+.esc img { width: 100%; border-radius: 10px; margin: 6px 0; }
+.escask { display: flex; gap: 8px; }
+.escask button { margin-top: 6px; }
+.dial { display: block; margin-top: 10px; padding: 14px; border-radius: 12px; background: #fff; color: var(--bad);
+        font-weight: 800; font-size: 17px; text-align: center; text-decoration: none; }
+#escTimeline { margin: 10px 0 0; padding-left: 18px; font-size: 13px; opacity: .92; max-height: 22vh; overflow: auto; }
+#escTimeline li { margin: 2px 0; }
+#escTimeline b { font-variant-numeric: tabular-nums; }
+.card.light input[type=text], .card.light input[type=password] { width: 100%; padding: 12px; font-size: 16px; border: 1px solid #c5cec9; border-radius: 10px; }
+#alert .card { max-height: 92vh; overflow: auto; }
+[hidden] { display: none !important; }
