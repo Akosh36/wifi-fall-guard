@@ -26,6 +26,18 @@ DEFAULTS = {
     "db": "data/wfg.sqlite3",
     "telegram": {"token": "", "chat_ids": []},
     "http": {"host": "0.0.0.0", "port": 8000},
+    # Room layout for the 3D view (metres; x = width, y = depth, z = height).
+    "room": {
+        "name": "Xona",
+        "size": [4.0, 3.5, 2.7],
+        "tx": [0.3, 0.3, 1.2],
+        "rx": {"0": [3.7, 0.4, 1.0], "1": [3.7, 3.1, 1.0], "2": [0.3, 3.1, 1.0]},
+        "furniture": [
+            {"kind": "bed", "pos": [3.0, 2.4], "size": [1.0, 2.0], "rot": 0},
+            {"kind": "chair", "pos": [0.9, 1.0], "size": [0.5, 0.5], "rot": 45},
+            {"kind": "table", "pos": [0.9, 1.7], "size": [0.9, 0.6], "rot": 0},
+        ],
+    },
 }
 
 

@@ -31,7 +31,7 @@ wfg = "wfg.cli:main"
 include = ["wfg*"]
 
 [tool.setuptools.package-data]
-"wfg.server" = ["static/*"]
+"wfg.server" = ["static/*", "static/app/*", "static/app/vendor/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

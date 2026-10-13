@@ -11,7 +11,9 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 
 from wfg.collector.hub import CSIHub
 from wfg.collector.sources import SimSource, UDPSource
@@ -84,6 +86,7 @@ class Runtime:
                 "activity_uz": ACTIVITY_UZ.get(latest.get("activity"), latest.get("activity")),
                 "nodes": self.hub.stats(), "source": self.settings["source"],
                 "truth": getattr(self.source, "truth", None), "classes": self.predictor.classes,
+                "fall_since": self.engine.detector.suspected_at,
                 "telegram": {"enabled": self.notifier.enabled, "recipients": len(self.notifier.recipients())},
                 "server_time": time.time()}
 
@@ -107,6 +110,9 @@ def create_app(settings: dict | None = None, config_path: str | None = None, aut
         rt.stop()
 
     app = FastAPI(title="WiFi Fall Guard", version="0.1.0", lifespan=lifespan)
+    # the Android app loads its page from its own assets and calls this API across origins
+    app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+    app.mount("/app", StaticFiles(directory=STATIC / "app", html=True), name="app")
 
     @app.get("/")
     def index():
@@ -119,6 +125,10 @@ def create_app(settings: dict | None = None, config_path: str | None = None, aut
     @app.get("/api/status")
     def status():
         return app.state.rt.status()
+
+    @app.get("/api/room")
+    def room():
+        return {**settings["room"], "nodes": settings["nodes"]}
 
     @app.get("/api/history")
     def history(seconds: float = 300):

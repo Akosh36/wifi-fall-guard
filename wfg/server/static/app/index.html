@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="uz">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="theme-color" content="#0d1a14">
+<title>Fall Guard 3D</title>
+<link rel="stylesheet" href="style.css">
+<script type="importmap">
+{ "imports": { "three": "./vendor/three.module.min.js", "three/addons/": "./vendor/" } }
+</script>
+</head>
+<body class="ok">
+<div id="scene"></div>
+
+<header id="bar">
+  <div class="dot" id="statusDot"></div>
+  <div class="txt">
+    <div id="stateText">Ulanmoqda…</div>
+    <div id="subText" class="sub">Server bilan aloqa o'rnatilmoqda</div>
+  </div>
+  <button id="settingsBtn" class="icon" aria-label="Sozlamalar">
+    <svg viewBox="0 0 24 24" width="22" height="22"><path fill="currentColor" d="M19.4 13a7.5 7.5 0 0 0 0-2l2.1-1.6-2-3.5-2.5 1a7.4 7.4 0 0 0-1.7-1L15 3.3h-4l-.4 2.6a7.4 7.4 0 0 0-1.7 1l-2.5-1-2 3.5L6.6 11a7.5 7.5 0 0 0 0 2l-2.1 1.6 2 3.5 2.5-1c.5.4 1.1.7 1.7 1l.4 2.6h4l.4-2.6c.6-.3 1.2-.6 1.7-1l2.5 1 2-3.5L19.4 13zM13 15.5a3.5 3.5 0 1 1 0-7 3.5 3.5 0 0 1 0 7z" transform="translate(-1 0)"/></svg>
+  </button>
+</header>
+
+<div id="personLabel" class="plabel" hidden></div>
+
+<footer id="info">
+  <div class="chip"><span class="k">Faoliyat</span><span id="activity">—</span></div>
+  <div class="chip"><span class="k">Yiqilish ehtimoli</span><span id="fallProb">—</span></div>
+  <div class="chip"><span class="k">Platalar</span><span id="nodes">—</span></div>
+  <div class="note">Odam joylashuvi taxminiy: tizim faoliyatni aniqlaydi, aniq koordinatani emas.</div>
+</footer>
+
+<div id="alert" class="modal" hidden>
+  <div class="card">
+    <div class="big">!</div>
+    <h1>XAVF</h1>
+    <p id="alertText">Yiqilish aniqlandi</p>
+    <p class="since" id="alertSince"></p>
+    <button id="ackBtn" class="primary">Tasdiqlash: hammasi joyida</button>
+    <button id="muteBtn" class="ghost">Ovozni o'chirish</button>
+  </div>
+</div>
+
+<div id="settings" class="modal" hidden>
+  <div class="card light">
+    <h2>Sozlamalar</h2>
+    <label for="serverInput">Server manzili</label>
+    <input id="serverInput" type="url" inputmode="url" placeholder="http://192.168.1.10:8000" autocomplete="off">
+    <p class="hint">Kompyuterda <code>wfg serve</code> yoki <code>wfg demo</code> ishga tushiring, telefon shu WiFi tarmog'ida bo'lsin.</p>
+    <label class="row"><input id="demoInput" type="checkbox"> Demo rejimi (serversiz, sun'iy ma'lumot)</label>
+    <div class="actions">
+      <button id="saveBtn" class="primary">Saqlash</button>
+      <button id="closeBtn" class="ghost">Bekor qilish</button>
+    </div>
+  </div>
+</div>
+
+<script type="module" src="app.js"></script>
+</body>
+</html>

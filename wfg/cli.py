@@ -109,7 +109,7 @@ def cmd_serve(a, demo: bool = False):
         s["source"] = a.source
     if getattr(a, "model", None):
         s["model"] = a.model
-    print(f"Dashboard: http://localhost:{a.port}")
+    print(f"Dashboard: http://localhost:{a.port}   3D xona: http://localhost:{a.port}/app/")
     uvicorn.run(create_app(s), host=s["http"]["host"], port=a.port, log_level="info")
 
 

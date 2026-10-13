@@ -1,0 +1,80 @@
+:root {
+  --ok: #1fbf6a;
+  --ok-dark: #0d1a14;
+  --bad: #e5322d;
+  --bad-dark: #2a0d0d;
+  --off: #8a94a0;
+  --text: #f2f5f3;
+  --muted: #b8c4bd;
+  --panel: rgba(10, 16, 14, .72);
+}
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body { margin: 0; height: 100%; overflow: hidden; }
+body {
+  font: 15px/1.35 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  color: var(--text);
+  background: var(--ok-dark);
+  transition: background .4s;
+}
+body.bad { background: var(--bad-dark); }
+body.off { background: #15181b; }
+#scene { position: fixed; inset: 0; }
+#scene canvas { display: block; touch-action: none; }
+
+#bar {
+  position: fixed; top: 0; left: 0; right: 0;
+  display: flex; align-items: center; gap: 12px;
+  padding: calc(env(safe-area-inset-top) + 12px) 16px 12px;
+  background: var(--ok); color: #fff;
+  box-shadow: 0 2px 12px rgba(0,0,0,.35);
+  transition: background .3s;
+}
+body.bad #bar { background: var(--bad); animation: flash 1s infinite alternate; }
+body.off #bar { background: #4a5058; }
+@keyframes flash { from { filter: brightness(1); } to { filter: brightness(1.25); } }
+@media (prefers-reduced-motion: reduce) { body.bad #bar { animation: none; } }
+#bar .dot { width: 14px; height: 14px; border-radius: 50%; background: #fff; flex: none; }
+#bar .txt { flex: 1; min-width: 0; }
+#stateText { font-size: 20px; font-weight: 700; letter-spacing: .2px; }
+#bar .sub { font-size: 13px; opacity: .92; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+button { font: inherit; cursor: pointer; }
+.icon { background: rgba(255,255,255,.18); color: #fff; border: 0; border-radius: 10px; width: 40px; height: 40px; display: grid; place-items: center; }
+
+#info {
+  position: fixed; left: 0; right: 0; bottom: 0;
+  display: flex; flex-wrap: wrap; gap: 8px;
+  padding: 10px 16px calc(env(safe-area-inset-bottom) + 12px);
+  background: linear-gradient(to top, rgba(0,0,0,.6), rgba(0,0,0,0));
+}
+.chip { background: var(--panel); border-radius: 10px; padding: 6px 10px; display: flex; flex-direction: column; min-width: 0; }
+.chip .k { font-size: 11px; color: var(--muted); }
+.chip span:last-child { font-weight: 600; }
+.note { width: 100%; font-size: 11px; color: var(--muted); }
+
+.plabel {
+  position: fixed; transform: translate(-50%, -100%);
+  background: var(--panel); border: 2px solid var(--ok);
+  border-radius: 999px; padding: 3px 10px; font-size: 13px; font-weight: 600;
+  pointer-events: none; white-space: nowrap;
+}
+body.bad .plabel { border-color: var(--bad); background: var(--bad); }
+
+.modal { position: fixed; inset: 0; display: grid; place-items: center; padding: 16px; background: rgba(0,0,0,.55); z-index: 10; }
+.modal[hidden] { display: none; }
+.card { width: 100%; max-width: 380px; border-radius: 18px; padding: 24px 20px; text-align: center; background: var(--bad); color: #fff; box-shadow: 0 10px 40px rgba(0,0,0,.5); }
+.card .big { width: 72px; height: 72px; margin: 0 auto 8px; border-radius: 50%; background: #fff; color: var(--bad); font-size: 48px; font-weight: 800; line-height: 72px; }
+.card h1 { margin: 4px 0; font-size: 34px; letter-spacing: 2px; }
+.card p { margin: 6px 0; font-size: 17px; }
+.card .since { font-size: 14px; opacity: .9; }
+.card button { display: block; width: 100%; margin-top: 12px; padding: 14px; border-radius: 12px; border: 0; font-size: 16px; font-weight: 700; }
+.card .primary { background: #fff; color: var(--bad); }
+.card .ghost { background: transparent; color: #fff; border: 2px solid rgba(255,255,255,.7); }
+.card.light { background: #fff; color: #1b2420; text-align: left; }
+.card.light h2 { margin: 0 0 12px; }
+.card.light label { display: block; font-size: 14px; margin: 10px 0 4px; }
+.card.light label.row { display: flex; gap: 8px; align-items: center; }
+.card.light input[type=url] { width: 100%; padding: 12px; font-size: 16px; border: 1px solid #c5cec9; border-radius: 10px; }
+.card.light .hint { font-size: 13px; color: #56645d; }
+.card.light .actions { display: flex; gap: 8px; }
+.card.light .primary { background: var(--ok); color: #fff; }
+.card.light .ghost { background: #eef2f0; color: #1b2420; border: 0; }

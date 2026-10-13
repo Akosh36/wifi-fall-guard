@@ -30,3 +30,18 @@ telegram:
 http:
   host: 0.0.0.0
   port: 8000
+
+# Room layout for the 3D view in the Android app and on /app (metres).
+# x = width, y = depth, z = height. Measure your room and the board positions.
+room:
+  name: Xona
+  size: [4.0, 3.5, 2.7]
+  tx: [0.3, 0.3, 1.2]            # csi_tx (router) board
+  rx:                            # csi_rx boards, keyed by CONFIG_WFG_NODE_ID
+    "0": [3.7, 0.4, 1.0]
+    "1": [3.7, 3.1, 1.0]
+    "2": [0.3, 3.1, 1.0]
+  furniture:                     # kind: bed | chair | table | sofa; pos = centre [x, y]; size = [w, d]
+    - {kind: bed, pos: [3.0, 2.4], size: [1.0, 2.0], rot: 0}
+    - {kind: chair, pos: [0.9, 1.0], size: [0.5, 0.5], rot: 45}
+    - {kind: table, pos: [0.9, 1.7], size: [0.9, 0.6], rot: 0}

@@ -27,6 +27,10 @@ def test_api_with_simulator(tmp_path):
         assert set(status["probs"]) == set(status["classes"])
         assert client.post("/api/test-alert").json()["telegram_enabled"] is False
         assert isinstance(client.get("/api/events").json(), list)
+        room = client.get("/api/room").json()
+        assert len(room["size"]) == 3 and set(room["rx"]) == {"0", "1", "2"}
+        assert "three" in client.get("/app/").text
+        assert client.get("/app/vendor/three.module.min.js").status_code == 200
         with client.websocket_connect("/ws") as ws:
             assert "state" in ws.receive_json()
 

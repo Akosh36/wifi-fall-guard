@@ -12,3 +12,9 @@ firmware/*/sdkconfig
 firmware/*/sdkconfig.old
 firmware/*/managed_components/
 .env
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+android/.idea/
+*.iml

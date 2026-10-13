@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Fall Guard</string>
+    <string name="channel_monitor">Kuzatuv</string>
+    <string name="channel_alerts">Yiqilish xavfi</string>
+    <string name="monitor_title">Kuzatuv yoqilgan</string>
+    <string name="alert_title">XAVF: yiqilish aniqlandi</string>
+    <string name="alert_text_suspected">Xonada odam yiqildi. Tekshirib ko\'ring!</string>
+    <string name="alert_text_alert">Odam yiqildi va turmayapti! Zudlik bilan yordam bering.</string>
+    <string name="ack">Tasdiqlash</string>
+</resources>
