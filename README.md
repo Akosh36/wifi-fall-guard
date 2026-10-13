@@ -23,6 +23,10 @@ wfg demo
 
 Brauzerda http://localhost:8000 oching. Simulyator taxminan 100 soniyalik ssenariyni takrorlaydi: xona bo'sh, odam kiradi, yuradi, o'tiradi, yotadi, **yiqiladi**, 20 soniya turmaydi → **XAVF**, keyin turib yuradi → bekor qilinadi. Birinchi ishga tushishda asos model simulyatsiya ma'lumotida o'qitiladi (taxminan 1–2 daqiqa).
 
+## Android ilova
+
+Jonli 3D xona ko'rinishi: normal holatda yashil, yiqilishda qizil va xavf alerti chiqadi. APK: [android-latest](https://github.com/Akosh36/wifi-fall-guard/releases/tag/android-latest). O'rnatish va ulash: [docs/android.md](docs/android.md).
+
 ## Haqiqiy qurilmalar bilan
 
 1. Qurilmalarni sotib oling va joylashtiring: [docs/hardware.md](docs/hardware.md)
@@ -71,7 +75,8 @@ wfg/models           CNN-1D, CNN-2D, Transformer (PyTorch)
 wfg/adapt            MMD, CORAL, DANN
 wfg/train            o'qitish, few-shot, tajribalar, metrikalar
 wfg/inference        real vaqt dvigateli, hodisa mantiqi
-wfg/server           FastAPI, veb panel, SQLite, Telegram bot
+wfg/server           FastAPI, veb panel, 3D xona sahifasi (/app/), SQLite, Telegram bot
+android/             Android ilova: jonli 3D xona, yashil/qizil holat, yiqilish alerti
 docs/                arxitektura, qurilmalar, dataset protokoli, tajribalar, diplom rejasi
 ```
 
@@ -83,6 +88,7 @@ Batafsil: [docs/architecture.md](docs/architecture.md). Diplomning yozma qismi r
 |---|---|
 | Python tizimi (yig'ish, DSP, modellar, moslashish, server, Telegram, veb panel) | Tayyor, testlar bilan |
 | ESP32-S3 proshivkasi | Yozilgan, CI'da ESP-IDF v5.3 bilan kompilyatsiya qilinadi. Haqiqiy platalarda hali sinalmagan |
+| Android ilova (3D xona, alert) | Yozilgan, APK CI'da yig'iladi: [docs/android.md](docs/android.md) |
 | Simulyatsiya natijalari | `results/simulated/` (faqat zanjir ishlashini ko'rsatadi, diplom uchun real natija emas) |
 | Real dataset va natijalar | Qurilmalar kelgandan keyin |
 
