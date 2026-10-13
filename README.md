@@ -25,7 +25,7 @@ Brauzerda http://localhost:8000 oching. Simulyator taxminan 100 soniyalik ssenar
 
 ## Android ilova
 
-Jonli 3D xona ko'rinishi: normal holatda yashil, yiqilishda qizil va xavf alerti chiqadi. APK: [android-latest](https://github.com/Akosh36/wifi-fall-guard/releases/tag/android-latest). O'rnatish va ulash: [docs/android.md](docs/android.md).
+Jonli 3D xona ko'rinishi: normal holatda yashil, yiqilishda qizil va xavf alerti chiqadi. Qo'riqlash rejimi (uyda begona harakat), taxminiy joylashuv, nafas va yurak urishi (eksperimental), oflayn tarix: [docs/security_mode.md](docs/security_mode.md). APK: [android-latest](https://github.com/Akosh36/wifi-fall-guard/releases/tag/android-latest). O'rnatish va ulash: [docs/android.md](docs/android.md).
 
 ## Haqiqiy qurilmalar bilan
 

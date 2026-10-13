@@ -6,9 +6,11 @@ Ilova xonaning 3D modelini ko'rsatadi: devorlar, mebel, TX va RX platalar, ular 
 - **Qizil** — yiqilish aniqlandi. Ekranda "XAVF" oynasi chiqadi, signal chalinadi va telefon titraydi. 20 soniya ichida odam turmasa, holat "XAVF: turmayapti" ga o'tadi.
 - **Kulrang** — server yoki platalar bilan aloqa yo'q.
 
+Yuqoridagi 🛡 tugmasi **qo'riqlash rejimini** yoqadi: uy egasi uyda bo'lmaganda har qanday harakat qizil xavf signalini beradi. 🕘 tugmasi telefonda saqlangan **tarixni** ochadi; u server bilan aloqa uzilganda ham ko'rinadi. Pastki qatorda nafas, yurak urishi (eksperimental) va taxminiy joylashuv ko'rsatiladi. Batafsil ma'lumot: [security_mode.md](security_mode.md).
+
 Ilova yopiq bo'lsa ham fon xizmati serverni kuzatadi. Yiqilishda to'liq ekranli bildirishnoma keladi, signal to'xtovsiz chalinadi va "Tasdiqlash" tugmasi chiqadi.
 
-> **Muhim:** WiFi CSI odamning **faoliyatini** aniqlaydi, uning xonadagi aniq **joyini** emas. Shuning uchun 3D figuraning joylashuvi taxminiy: u yurganda yo'lak bo'ylab yuradi, o'tirganda stulga, yotganda karavotga boradi. Diplomda buni shunday yozing: "vizualizatsiya klassifikator natijasini ko'rsatadi". Aniq joylashuvni aniqlash alohida tadqiqot vazifasi (localization).
+> **Muhim:** joylashuv 3 ta WiFi yo'li bo'yicha taxminiy, zona darajasida hisoblanadi. Polda u ko'k doira bilan ko'rsatiladi, doira kattaligi noaniqlikka teng. O'tirganda va yotganda figura stul yoki karavotga boradi. Aniqlik bo'yicha raqamlar [security_mode.md](security_mode.md) da.
 
 ## APK ni yuklab olish va o'rnatish
 
@@ -67,6 +69,6 @@ Android Studio'da ochish uchun `android/` papkasini oching. JDK 17 va Android SD
 
 ## Cheklovlar
 
-- Ulanish lokal tarmoqda oddiy HTTP orqali ishlaydi, shifrlash yo'q. Uydan tashqarida alert olish uchun Telegram bot ishlatiladi (`docs/architecture.md`).
+- Lokal tarmoqda ulanish oddiy HTTP orqali ishlaydi. Uydan tashqaridan ulanish uchun Tailscale va server tokenidan foydalaning ([security_mode.md](security_mode.md#uydan-tashqaridan-ulanish)).
 - APK test kaliti bilan imzolangan. U Play Store uchun emas, faqat to'g'ridan-to'g'ri o'rnatish uchun.
 - Ba'zi telefonlar (Xiaomi, Huawei, Samsung) fon ilovalarini o'chirib qo'yadi. Sozlamalarda Fall Guard uchun "Batareya cheklovi yo'q" ni tanlang.
