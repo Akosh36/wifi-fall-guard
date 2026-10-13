@@ -103,11 +103,20 @@ class MainActivity : Activity() {
     inner class Bridge {
         @JavascriptInterface fun getServer(): String = prefs.server
         @JavascriptInterface fun getDemo(): Boolean = prefs.demo
+        @JavascriptInterface fun getToken(): String = prefs.token
+
+        /** History stored on the phone by the alert service, readable while offline. */
+        @JavascriptInterface
+        fun history(since: Double, maxPoints: Int): String = HistoryDb.get(this@MainActivity).historyJson(since, maxPoints)
 
         @JavascriptInterface
-        fun setConfig(server: String, demo: Boolean) {
+        fun events(limit: Int): String = HistoryDb.get(this@MainActivity).eventsJson(limit)
+
+        @JavascriptInterface
+        fun setConfig(server: String, demo: Boolean, token: String) {
             prefs.server = server
             prefs.demo = demo
+            prefs.token = token
             runOnUiThread {
                 if (prefs.monitoring) AlertService.start(this@MainActivity) else AlertService.stop(this@MainActivity)
             }

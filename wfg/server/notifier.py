@@ -2,7 +2,8 @@
 
 Create a bot with @BotFather, put the token in ``WFG_TELEGRAM_TOKEN``. Each
 relative opens the bot and sends ``/start``; from then on they receive alerts.
-``/status`` replies with the current state, ``/stop`` unsubscribes.
+``/status`` replies with the current state, ``/arm`` and ``/disarm`` switch the
+home security mode, ``/stop`` unsubscribes.
 """
 
 from __future__ import annotations
@@ -25,6 +26,10 @@ MESSAGES = {
     "recovered": "✅ Odam turdi va yura boshladi ({after_s:.0f} soniyadan keyin). Xavf bekor qilindi.",
     "acknowledged": "👍 Ogohlantirish qabul qilindi.",
     "test": "🔔 Sinov xabari: WiFi Fall Guard ishlayapti.",
+    "intrusion": "🚨 QO'RIQLASH: {time} da uyda harakat aniqlandi! Uyda hech kim bo'lmasligi kerak edi.",
+    "intrusion_ended": "ℹ️ {time}: harakat to'xtadi, xona yana bo'sh. Qo'riqlash davom etmoqda.",
+    "armed": "🛡 Qo'riqlash rejimi yoqildi ({time}). 30 soniyadan keyin kuzatuv boshlanadi.",
+    "disarmed": "🏠 Qo'riqlash rejimi o'chirildi ({time}).",
 }
 
 ACTIVITY_UZ = {"empty": "xona bo'sh", "still": "qimirlamayapti", "walk": "yuryapti", "sit": "o'tirdi",
@@ -39,11 +44,14 @@ def format_event(ev: dict) -> str:
 
 class TelegramNotifier:
     def __init__(self, token: str | None, store: Store, chat_ids: list[str] | None = None,
-                 status_text: Callable[[], str] | None = None, notify_types=("alert", "recovered", "fall_suspected")):
+                 status_text: Callable[[], str] | None = None,
+                 notify_types=("alert", "recovered", "fall_suspected", "intrusion", "intrusion_ended", "armed", "disarmed"),
+                 on_command: Callable[[str], str | None] | None = None):
         self.token, self.store = token, store
         self.static_ids = [str(c) for c in (chat_ids or [])]
         self.status_text = status_text or (lambda: "Holat noma'lum")
         self.notify_types = set(notify_types)
+        self.on_command = on_command or (lambda name: None)
         self._stop = threading.Event()
         self._offset = 0
         self.sent: list[tuple[str, str]] = []  # (chat_id, text), kept for the dashboard and tests
@@ -97,12 +105,22 @@ class TelegramNotifier:
         name = chat.get("first_name") or chat.get("title") or ""
         if text.startswith("/start"):
             self.store.add_subscriber(cid, name)
-            self.send("Siz ogohlantirishlarga obuna bo'ldingiz. /status - holat, /stop - obunani bekor qilish.", [cid])
+            self.send("Siz ogohlantirishlarga obuna bo'ldingiz.\n/status - holat\n/arm - qo'riqlashni yoqish\n"
+                      "/disarm - qo'riqlashni o'chirish\n/stop - obunani bekor qilish", [cid])
         elif text.startswith("/stop"):
             self.store.remove_subscriber(cid)
             self.send("Obuna bekor qilindi.", [cid])
         elif text.startswith("/status"):
             self.send(self.status_text(), [cid])
+        elif text.startswith(("/arm", "/disarm")):
+            # chat_ids from the config are the owners; without them any subscriber may switch the mode
+            allowed = self.static_ids or self.recipients()
+            if cid not in allowed:
+                self.send("Sizda bu buyruq uchun ruxsat yo'q.", [cid])
+                return
+            reply = self.on_command(text.split()[0].lstrip("/").split("@")[0])
+            if reply:
+                self.send(reply, [cid])
 
     def _poll(self) -> None:
         while not self._stop.is_set():

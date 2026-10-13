@@ -1,4 +1,4 @@
-"""SQLite storage for fall events and Telegram subscribers."""
+"""SQLite storage: events, Telegram subscribers, settings and the status history."""
 
 from __future__ import annotations
 
@@ -15,6 +15,22 @@ CREATE TABLE IF NOT EXISTS events (
     prob REAL,
     after_s REAL,
     note TEXT
+);
+CREATE TABLE IF NOT EXISTS settings (
+    key TEXT PRIMARY KEY,
+    value TEXT
+);
+CREATE TABLE IF NOT EXISTS history (
+    t REAL PRIMARY KEY,
+    state TEXT,
+    activity TEXT,
+    fall REAL,
+    motion REAL,
+    x REAL,
+    y REAL,
+    breath REAL,
+    heart REAL,
+    security TEXT
 );
 CREATE TABLE IF NOT EXISTS subscribers (
     chat_id TEXT PRIMARY KEY,
@@ -41,10 +57,42 @@ class Store:
             self._conn.commit()
             return int(cur.lastrowid)
 
-    def events(self, limit: int = 50) -> list[dict]:
+    def events(self, limit: int = 50, since: float | None = None) -> list[dict]:
         with self._lock:
-            rows = self._conn.execute("SELECT * FROM events ORDER BY t DESC, id DESC LIMIT ?", (limit,)).fetchall()
+            rows = self._conn.execute("SELECT * FROM events WHERE t > ? ORDER BY t DESC, id DESC LIMIT ?",
+                                      (since or 0.0, limit)).fetchall()
         return [dict(r) for r in rows]
+
+    HISTORY_COLS = ("t", "state", "activity", "fall", "motion", "x", "y", "breath", "heart", "security")
+
+    def add_history(self, row: dict) -> None:
+        with self._lock:
+            self._conn.execute(f"INSERT OR REPLACE INTO history VALUES ({','.join('?' * len(self.HISTORY_COLS))})",
+                               tuple(row.get(c) for c in self.HISTORY_COLS))
+            self._conn.commit()
+
+    def history(self, since: float = 0.0, until: float | None = None, limit: int = 5000) -> list[dict]:
+        """Oldest first, so a client can page forward with ``since`` = last ``t`` it has."""
+        with self._lock:
+            rows = self._conn.execute("SELECT * FROM history WHERE t > ? AND t <= ? ORDER BY t LIMIT ?",
+                                      (since, until if until is not None else 1e12, limit)).fetchall()
+        return [dict(r) for r in rows]
+
+    def prune_history(self, older_than: float) -> int:
+        with self._lock:
+            n = self._conn.execute("DELETE FROM history WHERE t < ?", (older_than,)).rowcount
+            self._conn.commit()
+        return n
+
+    def get_setting(self, key: str, default: str | None = None) -> str | None:
+        with self._lock:
+            row = self._conn.execute("SELECT value FROM settings WHERE key = ?", (key,)).fetchone()
+        return row["value"] if row else default
+
+    def set_setting(self, key: str, value: str) -> None:
+        with self._lock:
+            self._conn.execute("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)", (key, value))
+            self._conn.commit()
 
     def add_subscriber(self, chat_id: str, name: str = "") -> None:
         with self._lock:

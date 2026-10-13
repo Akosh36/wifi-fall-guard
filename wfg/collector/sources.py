@@ -61,12 +61,14 @@ class SimSource:
     """
 
     def __init__(self, hub: CSIHub, room: str = "demo", scenario=None, fs: float = 100.0,
-                 speed: float = 1.0, seed: int = 0, n_nodes: int = 3):
+                 speed: float = 1.0, seed: int = 0, n_nodes: int = 3, layout=None):
         self.hub, self.fs, self.speed = hub, fs, speed
+        # with a room layout the simulated person also has a position and a known breathing / heart rate
         self.stream = ScenarioStream(Room.from_seed(room, n_nodes=n_nodes), scenario or DEMO_SCENARIO,
-                                     fs=fs, seed=seed)
+                                     fs=fs, seed=seed, layout=layout, vitals=layout is not None)
         self.n_nodes = n_nodes
         self.truth = "empty"
+        self.truth_pos: dict | None = None
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
         self._seq = 0
@@ -84,6 +86,8 @@ class SimSource:
             block = self.stream.read(chunk)
             if block is None:
                 break
+            pos = self.stream.last_pos
+            self.truth_pos = None if pos is None else {"x": round(float(pos[0]), 2), "y": round(float(pos[1]), 2)}
             truth_tail = self.stream.truth
             self.truth = truth_tail[sent + chunk - 1] if len(truth_tail) > sent + chunk - 1 else self.truth
             for i in range(chunk):

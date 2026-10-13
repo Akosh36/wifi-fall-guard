@@ -33,6 +33,32 @@ def test_api_with_simulator(tmp_path):
         assert client.get("/app/vendor/three.module.min.js").status_code == 200
         with client.websocket_connect("/ws") as ws:
             assert "state" in ws.receive_json()
+        assert {"location", "vitals", "security"} <= set(status)
+        assert client.post("/api/security", json={"armed": True}).json()["state"] == "arming"
+        assert client.get("/api/security").json()["armed"] is True
+        assert client.post("/api/security", json={"armed": False}).json()["state"] == "off"
+        types = [e["type"] for e in client.get("/api/events").json()]
+        assert "armed" in types and "disarmed" in types
+        rows = client.get("/api/history", params={"since": 0}).json()
+        assert rows and rows[0]["t"] <= rows[-1]["t"] and "security" in rows[0]
+
+
+def test_api_token(tmp_path):
+    s = load_settings(None)
+    from wfg.train.quick import train_sim_classic
+    train_sim_classic(tmp_path / "m.npz", rooms=("demo",), clips_per_class=5, stream_segments=4)
+    s.update(model=str(tmp_path / "m.npz"), db=str(tmp_path / "db.sqlite3"))
+    s["auth"]["token"] = "secret"
+    with TestClient(create_app(s, autostart=False)) as client:
+        assert client.get("/api/health").status_code == 200
+        assert client.get("/api/status").status_code == 401
+        assert client.get("/api/status", params={"token": "secret"}).status_code == 200
+        assert client.get("/api/status", headers={"Authorization": "Bearer secret"}).status_code == 200
+        import pytest
+        from starlette.websockets import WebSocketDisconnect
+        with pytest.raises(WebSocketDisconnect):
+            with client.websocket_connect("/ws") as ws:
+                ws.receive_json()
 
 
 def test_telegram_subscribe_flow(tmp_path):

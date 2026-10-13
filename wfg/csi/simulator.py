@@ -116,7 +116,8 @@ def _walking(t: np.ndarray, speed_profile: np.ndarray, fs: float, rng: np.random
 
 
 def trajectory(activity: str, duration: float, fs: float, rng: np.random.Generator,
-               onset: float | None = None, context: str = "auto") -> tuple[np.ndarray, np.ndarray]:
+               onset: float | None = None, context: str = "auto",
+               breathing: bool = True) -> tuple[np.ndarray, np.ndarray]:
     """Body path-length change ``s`` (m) and body gain multiplier for one activity clip.
 
     Transitional activities (sit, lie, fall) start at ``onset`` seconds. Before
@@ -124,6 +125,7 @@ def trajectory(activity: str, duration: float, fs: float, rng: np.random.Generat
     walks and stops just before it, because in real life people often fall
     while walking. Walking clips sometimes include stopping or starting, so a
     model cannot mistake "stopped walking" for "fell".
+    ``breathing=False`` leaves chest motion out (the live stream adds its own, with a known rate).
     """
     n = int(round(duration * fs))
     t = np.arange(n) / fs
@@ -132,10 +134,13 @@ def trajectory(activity: str, duration: float, fs: float, rng: np.random.Generat
         onset = rng.uniform(0.6, max(0.7, duration - 2.6))
     vary = context == "auto"
 
+    def chest() -> np.ndarray:
+        return _breathing(t, rng) if breathing else np.zeros(n)
+
     if activity == "empty":
         return np.zeros(n), np.zeros(n)
     if activity == "still":
-        s = _breathing(t, rng)
+        s = chest()
         if vary and rng.random() < 0.25:  # finishes walking at the start of the clip
             stop = rng.uniform(0.3, 1.2)
             s = s + _walking(t, 1 - _smoothstep((t - stop + 0.4) / 0.4), fs, rng)
@@ -149,7 +154,7 @@ def trajectory(activity: str, duration: float, fs: float, rng: np.random.Generat
         elif r < 0.4:  # starts walking during the clip
             start = rng.uniform(0.3, duration - 1.5)
             profile = _smoothstep((t - start) / 0.5)
-        return _walking(t, profile, fs, rng) + _breathing(t, rng), gain
+        return _walking(t, profile, fs, rng) + chest(), gain
 
     rel = t - onset
     if activity == "sit":
@@ -168,7 +173,7 @@ def trajectory(activity: str, duration: float, fs: float, rng: np.random.Generat
     else:
         raise ValueError(f"unknown activity {activity!r}")
 
-    s = s + _breathing(t, rng)
+    s = s + chest()
     if vary and rng.random() < 0.5:  # walking until just before the transition
         w = _walking(t, 1 - _smoothstep((rel + 0.4) / 0.4), fs, rng)
         i0 = min(int(np.searchsorted(t, onset)), n - 1)
@@ -181,13 +186,20 @@ def trajectory(activity: str, duration: float, fs: float, rng: np.random.Generat
 
 
 def synthesize(room: Room, s: np.ndarray, gain: np.ndarray, rng: np.random.Generator,
-               phase_noise: bool = True) -> np.ndarray:
-    """Complex CSI (nodes, T, 52) for a body trajectory in a room, int8-quantised like ESP32."""
+               phase_noise: bool = True, link_gain: np.ndarray | None = None) -> np.ndarray:
+    """Complex CSI (nodes, T, 52) for a body trajectory in a room, int8-quantised like ESP32.
+
+    ``link_gain`` (nodes, T) scales the body reflection per receiver, e.g. by how
+    close the person is to each TX-RX link (see :mod:`wfg.geometry`).
+    """
     n = len(s)
     static = room.static_response()[:, None, :]  # (nodes, 1, 52)
     path = room.base_path[:, None] + room.geometry[:, None] * s[None, :]  # (nodes, T)
     body_phase = -2j * np.pi * (FC + FREQS[None, None, :]) * path[:, :, None] / C
-    body = (room.body_gain[:, None] * gain[None, :])[:, :, None] * np.exp(body_phase)
+    g = room.body_gain[:, None] * gain[None, :]
+    if link_gain is not None:
+        g = g * link_gain
+    body = g[:, :, None] * np.exp(body_phase)
     h = static + body
     h = h * (1 + room.agc_jitter * rng.standard_normal((room.n_nodes, n, 1)))  # AGC
     noise = room.noise * (rng.standard_normal(h.shape) + 1j * rng.standard_normal(h.shape)) / np.sqrt(2)
@@ -230,13 +242,31 @@ class ScenarioStream:
 
     ``scenario`` is a list of ``(activity, seconds)``. Transitional activities
     are rendered with their onset at the start of the segment.
+
+    With a ``layout`` the person also has a position on the floor plan: they
+    walk between free spots, go to the chair to sit and to the bed to lie down,
+    and each link's body reflection depends on how close they are to it. With
+    ``vitals`` the chest moves with a known breathing and heart rate. Both are
+    exposed as ground truth (``last_pos``, ``vitals_truth``) so the localizer
+    and the vital-sign estimator can be checked against them.
     """
 
     def __init__(self, room: Room, scenario: list[tuple[str, float]], fs: float = 100.0,
-                 seed: int = 0, loop: bool = True):
+                 seed: int = 0, loop: bool = True, layout=None, vitals: bool = False):
         self.room, self.fs, self.loop = room, fs, loop
         self.rng = np.random.default_rng(seed)
         self.scenario = scenario
+        self.layout, self.vitals = layout, vitals
+        prng = np.random.default_rng(seed + 7919)
+        self._prng = prng  # positions and vital signs use their own generator
+        self.breath_hz = float(prng.uniform(0.22, 0.33))   # 13-20 breaths / min
+        self.heart_hz = float(prng.uniform(1.05, 1.3))     # 63-78 beats / min
+        self._phase = prng.uniform(0, 2 * np.pi, 2)
+        self._t_abs = 0  # samples rendered so far
+        self.pos = None if layout is None else layout.size[:2] / 2
+        self._pos_buf = np.zeros((0, 2))
+        self.last_pos: np.ndarray | None = None
+        self._entry = None if layout is None else np.array([layout.size[0] / 2, 0.35])
         self.truth: list[str] = []  # activity at every sample
         self.events: list[tuple[int, str]] = []  # (sample index of onset, transitional activity)
         self._buf = np.zeros((room.n_nodes, 0, len(FREQS)), dtype=np.complex64)
@@ -251,15 +281,28 @@ class ScenarioStream:
         activity, seconds = self.scenario[self._seg]
         self._seg += 1
         onset = 0.3 if activity in ("sit", "lie", "fall") else None
-        s, gain = trajectory(activity, seconds, self.fs, self.rng, onset=onset, context="none")
+        s, gain = trajectory(activity, seconds, self.fs, self.rng, onset=onset, context="none",
+                             breathing=not self.vitals)
         # keep the body position and gain continuous across segment boundaries
         s = s + self._s_end
         blend = np.clip(np.arange(len(gain)) / (0.5 * self.fs), 0.0, 1.0)
         gain = self._g_end + (gain - self._g_end) * blend
         self._s_end, self._g_end = float(s[-1]), float(gain[-1])
-        csi = synthesize(self.room, s, gain, self.rng)
+        n = len(s)
+        if self.vitals and activity != "empty":
+            s = s + self._chest(n)
+        link_gain = None
+        if self.layout is not None:
+            pos = self._positions(activity, n)
+            from wfg.geometry import link_sensitivity
+            near = np.where(np.isnan(pos[:, :1]), 1.0, link_sensitivity(self.layout.link_distance(np.nan_to_num(pos))))
+            # divide by the room average so the body is as strong on average as in clips without a layout
+            room_mean = link_sensitivity(self.layout.link_distance(self.layout.grid(0.2))).mean(axis=0)
+            link_gain = (near / room_mean).T  # (nodes, T)
+            self._pos_buf = np.concatenate([self._pos_buf, pos])
+        self._t_abs += n
+        csi = synthesize(self.room, s, gain, self.rng, link_gain=link_gain)
         self._buf = np.concatenate([self._buf, csi], axis=1)
-        n = csi.shape[1]
         if onset is not None:  # the transition itself, then the person rests still
             self.events.append((len(self.truth) + int(onset * self.fs), activity))
             moving = min(n, int(3.5 * self.fs))
@@ -274,6 +317,50 @@ class ScenarioStream:
             if not self._render_next():
                 return None
         out, self._buf = self._buf[:, :n], self._buf[:, n:]
+        if self.layout is not None:
+            p, self._pos_buf = self._pos_buf[:n], self._pos_buf[n:]
+            self.last_pos = None if np.isnan(p[-1, 0]) else p[-1].copy()
+        return out
+
+    @property
+    def vitals_truth(self) -> dict:
+        return {"breath_bpm": self.breath_hz * 60, "heart_bpm": self.heart_hz * 60}
+
+    def _chest(self, n: int) -> np.ndarray:
+        """Chest wall motion: breathing (~5 mm) plus the much smaller heartbeat (~0.3 mm)."""
+        t = (self._t_abs + np.arange(n)) / self.fs
+        breath = 0.005 * np.sin(2 * np.pi * self.breath_hz * t + self._phase[0])
+        x = 2 * np.pi * self.heart_hz * t + self._phase[1]
+        heart = 0.0003 * (np.sin(x) + 0.4 * np.sin(2 * x))
+        return breath + heart
+
+    def _positions(self, activity: str, n: int) -> np.ndarray:
+        """Floor position at every sample of a segment (NaN while the room is empty)."""
+        lay, rng = self.layout, self._prng
+        if activity == "empty":
+            self.pos = None
+            return np.full((n, 2), np.nan)
+        start = self._entry.copy() if self.pos is None else self.pos.copy()
+        out = np.empty((n, 2))
+        if activity == "walk":
+            p, target, speed = start, lay.random_free_point(rng), rng.uniform(0.6, 1.0)
+            for i in range(n):
+                d = target - p
+                dist = float(np.linalg.norm(d))
+                if dist < 0.05:
+                    target = lay.random_free_point(rng)
+                else:
+                    p = p + d / dist * min(dist, speed / self.fs)
+                out[i] = p
+        else:
+            target = start
+            spot = {"sit": "chair", "lie": "bed"}.get(activity)
+            f = lay.furniture_of(spot) if spot else None
+            if f is not None:
+                target = np.asarray(f["pos"], float)
+            k = _smoothstep(np.arange(n) / self.fs / 1.0)[:, None]  # gets there within ~1 s
+            out[:] = start + (target - start) * k
+        self.pos = out[-1].copy()
         return out
 
 
@@ -301,7 +388,7 @@ def random_scenario(rng: np.random.Generator, n_segments: int = 12) -> list[tupl
 
 
 def stream_windows(room: Room, rng: np.random.Generator, n_segments: int = 12, win: float = 4.0,
-                   hop: float = 1.0, fs: float = 100.0) -> list[dict]:
+                   hop: float = 1.0, fs: float = 100.0, layout=None) -> list[dict]:
     """Label sliding windows of a continuous random scenario the way the real-time engine sees them.
 
     A window is labelled with a transition (sit / lie / fall) when its onset lies
@@ -311,7 +398,7 @@ def stream_windows(room: Room, rng: np.random.Generator, n_segments: int = 12, w
     walking, the end of a walk, a person resting after lying down).
     """
     stream = ScenarioStream(room, random_scenario(rng, n_segments), fs=fs,
-                            seed=int(rng.integers(1 << 31)), loop=False)
+                            seed=int(rng.integers(1 << 31)), loop=False, layout=layout, vitals=layout is not None)
     chunks = []
     while (c := stream.read(int(fs))) is not None:
         chunks.append(c)

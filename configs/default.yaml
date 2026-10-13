@@ -1,5 +1,5 @@
 # WiFi Fall Guard runtime settings. Environment variables override these:
-#   WFG_SOURCE, WFG_MODEL, WFG_TELEGRAM_TOKEN, WFG_TELEGRAM_CHAT_IDS, WFG_UDP_PORT
+#   WFG_SOURCE, WFG_MODEL, WFG_TOKEN, WFG_TELEGRAM_TOKEN, WFG_TELEGRAM_CHAT_IDS, WFG_UDP_PORT
 
 source: sim            # "udp" = real ESP32-S3 nodes, "sim" = built-in simulator
 udp:
@@ -30,6 +30,15 @@ telegram:
 http:
   host: 0.0.0.0
   port: 8000
+auth:
+  token: ""            # API/app password; required when the server is reachable from the internet (better: WFG_TOKEN)
+
+security:              # home security mode ("Qo'riqlash")
+  exit_delay: 30       # seconds to leave the house after arming
+  confirm_windows: 3   # 0.5 s windows with a person present before the intrusion alarm
+  quiet_seconds: 60    # empty room this long ends the intrusion state
+
+history_days: 7        # status history kept on the server (for the app's offline view)
 
 # Room layout for the 3D view in the Android app and on /app (metres).
 # x = width, y = depth, z = height. Measure your room and the board positions.

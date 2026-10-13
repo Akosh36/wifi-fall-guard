@@ -38,7 +38,9 @@ body.off #bar { background: #4a5058; }
 #stateText { font-size: 20px; font-weight: 700; letter-spacing: .2px; }
 #bar .sub { font-size: 13px; opacity: .92; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 button { font: inherit; cursor: pointer; }
-.icon { background: rgba(255,255,255,.18); color: #fff; border: 0; border-radius: 10px; width: 40px; height: 40px; display: grid; place-items: center; }
+.icon { background: rgba(255,255,255,.18); color: #fff; border: 0; border-radius: 10px; width: 40px; height: 40px; display: grid; place-items: center; flex: none; }
+.icon.on { background: #fff; color: #0d1a14; }
+#bar { gap: 8px; }
 
 #info {
   position: fixed; left: 0; right: 0; bottom: 0;
@@ -78,3 +80,17 @@ body.bad .plabel { border-color: var(--bad); background: var(--bad); }
 .card.light .actions { display: flex; gap: 8px; }
 .card.light .primary { background: var(--ok); color: #fff; }
 .card.light .ghost { background: #eef2f0; color: #1b2420; border: 0; }
+
+.card.wide { max-width: 520px; max-height: 88vh; overflow: auto; }
+.seg { display: flex; gap: 6px; margin-bottom: 10px; }
+.seg button { flex: 1; padding: 8px 4px; border-radius: 8px; border: 1px solid #c5cec9; background: #fff; color: #1b2420; font-size: 13px; margin: 0; }
+.seg button.on { background: #1b2420; color: #fff; border-color: #1b2420; }
+#histChart { width: 100%; height: 120px; background: #16211c; border-radius: 10px; display: block; }
+.sw { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin: 0 3px 0 6px; vertical-align: -1px; }
+.sw.g { background: rgba(31,191,106,.6); } .sw.r { background: rgba(229,50,45,.8); } .sw.o { background: rgba(138,148,160,.6); }
+#histEvents { list-style: none; margin: 0; padding: 0; font-size: 14px; }
+#histEvents li { display: flex; gap: 10px; padding: 7px 0; border-bottom: 1px solid #e3e8e5; }
+#histEvents li span { color: #56645d; font-variant-numeric: tabular-nums; min-width: 92px; }
+#histEvents li.red { color: #b3221e; font-weight: 600; }
+.toast { position: fixed; left: 16px; right: 16px; bottom: calc(env(safe-area-inset-bottom) + 110px); background: #1b2420; color: #fff; padding: 12px 14px; border-radius: 10px; text-align: center; z-index: 20; }
+.toast[hidden] { display: none; }

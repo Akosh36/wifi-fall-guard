@@ -30,8 +30,10 @@ import java.io.IOException
 import java.util.concurrent.TimeUnit
 
 /**
- * Keeps a WebSocket to the server's /ws while the app is in the background and
- * raises a loud, full-screen notification when the room turns red (fall).
+ * Keeps a WebSocket to the server's /ws while the app is in the background,
+ * stores the status history on the phone (also fetching what was missed while
+ * offline) and raises a loud, full-screen notification when the room turns red:
+ * a fall, or any movement while the home security mode is on.
  */
 class AlertService : Service() {
 
@@ -41,7 +43,7 @@ class AlertService : Service() {
         private const val CH_ALERT = "alerts_v1"
         private const val ID_MONITOR = 1
         private const val ID_ALERT = 2
-        private val RED = setOf("fall_suspected", "alert")
+        private val RED = setOf("fall_suspected", "alert", "intrusion")
         private val ACTIVITY_UZ = mapOf(
             "empty" to "xona bo'sh", "still" to "qimirlamayapti", "walk" to "yuryapti",
             "sit" to "o'tiribdi", "lie" to "yotibdi", "fall" to "yiqildi",
@@ -58,6 +60,10 @@ class AlertService : Service() {
     private val http = OkHttpClient.Builder().pingInterval(15, TimeUnit.SECONDS).build()
     private val main = Handler(Looper.getMainLooper())
     private lateinit var prefs: Prefs
+    private lateinit var db: HistoryDb
+    private val io = java.util.concurrent.Executors.newSingleThreadExecutor()
+    private var lastSaved = 0.0
+    private var lastSavedKey = ""
     @Volatile private var socket: WebSocket? = null
     private var server = ""
     private var lastState = ""
@@ -69,6 +75,7 @@ class AlertService : Service() {
     override fun onCreate() {
         super.onCreate()
         prefs = Prefs(this)
+        db = HistoryDb.get(this)
         createChannels()
     }
 
@@ -87,6 +94,7 @@ class AlertService : Service() {
 
     override fun onDestroy() {
         stopped = true
+        io.shutdown()
         main.removeCallbacksAndMessages(null)
         socket?.cancel()
         Alarm.stop()
@@ -96,8 +104,10 @@ class AlertService : Service() {
     private fun connect() {
         socket?.cancel()
         server = prefs.server
-        val url = server.replaceFirst(Regex("^http"), "ws") + "/ws"
+        val url = prefs.url("/ws").replaceFirst(Regex("^http"), "ws")
         socket = http.newWebSocket(Request.Builder().url(url).build(), object : WebSocketListener() {
+            override fun onOpen(webSocket: WebSocket, response: Response) = backfill()
+
             override fun onMessage(webSocket: WebSocket, text: String) {
                 val json = runCatching { JSONObject(text) }.getOrNull() ?: return
                 main.post { onStatus(json) }
@@ -118,12 +128,45 @@ class AlertService : Service() {
         }
     }
 
+    /** Fetch the rows and events the server recorded while this phone was not listening. */
+    private fun backfill() = io.execute {
+        runCatching {
+            val since = db.lastT().takeIf { it > 0 } ?: (System.currentTimeMillis() / 1000.0 - 24 * 3600)
+            getJson("/api/history?since=$since&limit=20000")?.let { db.addRows(org.json.JSONArray(it)) }
+            fetchEvents()
+            db.prune(System.currentTimeMillis() / 1000.0)
+        }
+    }
+
+    private fun fetchEvents() = getJson("/api/events?limit=200")?.let { db.addEvents(org.json.JSONArray(it)) }
+
+    private fun getJson(path: String): String? =
+        http.newCall(Request.Builder().url(prefs.url(path)).build()).execute().use { r ->
+            if (r.isSuccessful) r.body?.string() else null
+        }
+
+    private fun save(s: JSONObject, state: String, security: String) {
+        val now = System.currentTimeMillis() / 1000.0
+        val t = s.optDouble("server_time", now).takeIf { !it.isNaN() } ?: now
+        val key = "$state/$security"
+        if (t - lastSaved < 5 && key == lastSavedKey) return // one row per 5 s unless something changes
+        lastSaved = t
+        lastSavedKey = key
+        io.execute { runCatching { db.addStatus(s, t) } }
+    }
+
     private fun onStatus(s: JSONObject) {
-        val state = s.optString("state")
+        val security = s.optJSONObject("security")?.optString("state") ?: "off"
+        val state = if (security == "intrusion") "intrusion" else s.optString("state")
+        save(s, s.optString("state"), security)
         val red = state in RED
         val wasRed = lastState in RED
+        if (state != lastState && (red || wasRed)) io.execute { runCatching { fetchEvents() } }
         val line = when {
+            state == "intrusion" -> "XAVF: uyda begona harakat!"
             red -> "XAVF: yiqilish!"
+            security == "armed" -> "Qo'riqlanmoqda · harakat yo'q"
+            security == "arming" -> "Qo'riqlash yoqilmoqda"
             state == "offline" -> "Server bilan aloqa yo'q"
             state == "waiting_for_nodes" || state == "starting" -> "Platalardan signal kutilmoqda"
             else -> "Normal · " + (ACTIVITY_UZ[s.optString("activity")] ?: s.optString("activity"))
@@ -151,19 +194,25 @@ class AlertService : Service() {
             this, 1, Intent(this, AlertService::class.java).setAction(ACTION_ACK),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
-        val text = getString(if (state == "alert") R.string.alert_text_alert else R.string.alert_text_suspected)
+        val text = getString(
+            when (state) {
+                "intrusion" -> R.string.alert_text_intrusion
+                "alert" -> R.string.alert_text_alert
+                else -> R.string.alert_text_suspected
+            }
+        )
         val n = NotificationCompat.Builder(this, CH_ALERT)
             .setSmallIcon(R.drawable.ic_stat)
             .setColor(ContextCompat.getColor(this, R.color.bad))
             .setColorized(true)
-            .setContentTitle(getString(R.string.alert_title))
+            .setContentTitle(getString(if (state == "intrusion") R.string.intrusion_title else R.string.alert_title))
             .setContentText(text)
             .setStyle(NotificationCompat.BigTextStyle().bigText(text))
             .setPriority(NotificationCompat.PRIORITY_MAX)
             .setCategory(NotificationCompat.CATEGORY_ALARM)
             .setContentIntent(open)
             .setFullScreenIntent(open, true)
-            .addAction(0, getString(R.string.ack), ack)
+            .apply { if (state != "intrusion") addAction(0, getString(R.string.ack), ack) }
             .setAutoCancel(true)
             .build()
         n.flags = n.flags or Notification.FLAG_INSISTENT // repeat the sound until someone reacts
@@ -172,7 +221,7 @@ class AlertService : Service() {
 
     private fun acknowledge() {
         getSystemService(NotificationManager::class.java).cancel(ID_ALERT)
-        val req = Request.Builder().url("${prefs.server}/api/ack").post(ByteArray(0).toRequestBody()).build()
+        val req = Request.Builder().url(prefs.url("/api/ack")).post(ByteArray(0).toRequestBody()).build()
         http.newCall(req).enqueue(object : Callback {
             override fun onFailure(call: Call, e: IOException) {}
             override fun onResponse(call: Call, response: Response) = response.close()

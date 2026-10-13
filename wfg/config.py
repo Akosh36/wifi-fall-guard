@@ -26,6 +26,9 @@ DEFAULTS = {
     "db": "data/wfg.sqlite3",
     "telegram": {"token": "", "chat_ids": []},
     "http": {"host": "0.0.0.0", "port": 8000},
+    "auth": {"token": ""},  # set when the server is reachable from outside the home network
+    "security": {"exit_delay": 30.0, "confirm_windows": 3, "quiet_seconds": 60.0},
+    "history_days": 7,
     # Room layout for the 3D view (metres; x = width, y = depth, z = height).
     "room": {
         "name": "Xona",
@@ -61,6 +64,8 @@ def load_settings(path: str | Path | None = None) -> dict:
         s["telegram"]["token"] = env["WFG_TELEGRAM_TOKEN"]
     if env.get("WFG_TELEGRAM_CHAT_IDS"):
         s["telegram"]["chat_ids"] = [c.strip() for c in env["WFG_TELEGRAM_CHAT_IDS"].split(",") if c.strip()]
+    if env.get("WFG_TOKEN"):
+        s["auth"]["token"] = env["WFG_TOKEN"]
     if env.get("WFG_UDP_PORT"):
         s["udp"]["port"] = int(env["WFG_UDP_PORT"])
     return s

@@ -14,13 +14,13 @@ from wfg.inference.predictor import Predictor, load_predictor
 
 
 def replay(model: str | Predictor, room: str = "demo", scenario=None, fs: float = 100.0, hop: float = 0.5,
-           seed: int = 0, verbose: bool = True, detector: DetectorConfig | None = None):
+           seed: int = 0, verbose: bool = True, detector: DetectorConfig | None = None, **stream_kwargs):
     scenario = scenario or DEMO_SCENARIO
     predictor = load_predictor(model) if isinstance(model, str) else model
     hub = CSIHub([0, 1, 2], fs=fs)
     events = []
     engine = Engine(hub, predictor, hop, detector, on_event=events.append)
-    stream = ScenarioStream(Room.from_seed(room), scenario, fs=fs, seed=seed, loop=False)
+    stream = ScenarioStream(Room.from_seed(room), scenario, fs=fs, seed=seed, loop=False, **stream_kwargs)
     step = int(hop * fs)
     n, rows = 0, []
     while (block := stream.read(step)) is not None:

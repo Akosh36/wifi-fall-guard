@@ -19,6 +19,12 @@
     <div id="stateText">Ulanmoqda…</div>
     <div id="subText" class="sub">Server bilan aloqa o'rnatilmoqda</div>
   </div>
+  <button id="shieldBtn" class="icon" aria-label="Qo'riqlash rejimi" aria-pressed="false" title="Qo'riqlash rejimi">
+    <svg viewBox="0 0 24 24" width="22" height="22"><path fill="currentColor" d="M12 2 4 5v6c0 5 3.4 9.7 8 11 4.6-1.3 8-6 8-11V5l-8-3zm0 2.2 6 2.2V11c0 4-2.6 7.7-6 8.9-3.4-1.2-6-4.9-6-8.9V6.4l6-2.2z"/></svg>
+  </button>
+  <button id="historyBtn" class="icon" aria-label="Tarix" title="Tarix">
+    <svg viewBox="0 0 24 24" width="22" height="22"><path fill="currentColor" d="M13 3a9 9 0 0 0-9 9H1l4 4 4-4H6a7 7 0 1 1 2.05 4.95l-1.42 1.42A9 9 0 1 0 13 3zm-1 5v5l4.25 2.52.77-1.28-3.52-2.09V8H12z"/></svg>
+  </button>
   <button id="settingsBtn" class="icon" aria-label="Sozlamalar">
     <svg viewBox="0 0 24 24" width="22" height="22"><path fill="currentColor" d="M19.4 13a7.5 7.5 0 0 0 0-2l2.1-1.6-2-3.5-2.5 1a7.4 7.4 0 0 0-1.7-1L15 3.3h-4l-.4 2.6a7.4 7.4 0 0 0-1.7 1l-2.5-1-2 3.5L6.6 11a7.5 7.5 0 0 0 0 2l-2.1 1.6 2 3.5 2.5-1c.5.4 1.1.7 1.7 1l.4 2.6h4l.4-2.6c.6-.3 1.2-.6 1.7-1l2.5 1 2-3.5L19.4 13zM13 15.5a3.5 3.5 0 1 1 0-7 3.5 3.5 0 0 1 0 7z" transform="translate(-1 0)"/></svg>
   </button>
@@ -28,9 +34,11 @@
 
 <footer id="info">
   <div class="chip"><span class="k">Faoliyat</span><span id="activity">—</span></div>
-  <div class="chip"><span class="k">Yiqilish ehtimoli</span><span id="fallProb">—</span></div>
+  <div class="chip"><span class="k">Nafas</span><span id="breath">—</span></div>
+  <div class="chip"><span class="k">Yurak*</span><span id="heart">—</span></div>
+  <div class="chip"><span class="k">Joylashuv (zona)</span><span id="where">—</span></div>
   <div class="chip"><span class="k">Platalar</span><span id="nodes">—</span></div>
-  <div class="note">Odam joylashuvi taxminiy: tizim faoliyatni aniqlaydi, aniq koordinatani emas.</div>
+  <div class="note">Joylashuv WiFi yo'llari bo'yicha taxminiy (zona, ±r m). Nafas va yurak faqat odam tinch turganda o'lchanadi; *yurak urishi eksperimental.</div>
 </footer>
 
 <div id="alert" class="modal" hidden>
@@ -49,6 +57,8 @@
     <h2>Sozlamalar</h2>
     <label for="serverInput">Server manzili</label>
     <input id="serverInput" type="url" inputmode="url" placeholder="http://192.168.1.10:8000" autocomplete="off">
+    <label for="tokenInput">Token (server parolli bo'lsa)</label>
+    <input id="tokenInput" type="password" autocomplete="off" placeholder="bo'sh qoldirish mumkin">
     <p class="hint">Kompyuterda <code>wfg serve</code> yoki <code>wfg demo</code> ishga tushiring, telefon shu WiFi tarmog'ida bo'lsin.</p>
     <label class="row"><input id="demoInput" type="checkbox"> Demo rejimi (serversiz, sun'iy ma'lumot)</label>
     <div class="actions">
@@ -57,6 +67,22 @@
     </div>
   </div>
 </div>
+
+<div id="history" class="modal" hidden>
+  <div class="card light wide">
+    <h2>Tarix</h2>
+    <div class="seg">
+      <button data-hours="1" class="on">1 soat</button><button data-hours="6">6 soat</button><button data-hours="24">24 soat</button><button data-hours="168">7 kun</button>
+    </div>
+    <canvas id="histChart" aria-label="Harakat grafigi"></canvas>
+    <p class="hint"><span class="sw g"></span>normal <span class="sw r"></span>yiqilish yoki begona harakat <span class="sw o"></span>aloqa yo'q · chiziq: harakat kuchi</p>
+    <p class="hint" id="histRange"></p>
+    <ul id="histEvents"></ul>
+    <div class="actions"><button id="histClose" class="ghost">Yopish</button></div>
+  </div>
+</div>
+
+<div id="toast" class="toast" hidden></div>
 
 <script type="module" src="app.js"></script>
 </body>

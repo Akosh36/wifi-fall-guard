@@ -1,6 +1,9 @@
 // Live 3D room view for WiFi Fall Guard.
 // Runs in the Android app (WebView, native bridge `window.WFG`) and in a browser at /app/.
 // Data comes from the server WebSocket /ws (same JSON as /api/status); demo mode generates it locally.
+// Two modes on top of fall detection: "Uyda" (normal) and "Qo'riqlash" (home security: any presence is an intrusion).
+// History is cached on the device (native SQLite in the app, localStorage in a browser) so it stays
+// readable while the server is unreachable.
 
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/OrbitControls.js";
@@ -19,6 +22,10 @@ const DEFAULT_ROOM = {
   ],
 };
 const COLORS = { ok: 0x1fbf6a, bad: 0xe5322d, off: 0x8a94a0 };
+const EVENT_UZ = { fall_suspected: "Yiqilish gumoni", alert: "XAVF: odam turmadi", recovered: "Odam turib ketdi",
+                   acknowledged: "Tasdiqlandi", intrusion: "Begona harakat!", intrusion_ended: "Harakat to'xtadi",
+                   armed: "Qo'riqlash yoqildi", disarmed: "Qo'riqlash o'chirildi" };
+const RED_EVENTS = new Set(["fall_suspected", "alert", "intrusion"]);
 
 // ---------------------------------------------------------------- settings / bridge
 const bridge = window.WFG || null;
@@ -33,12 +40,18 @@ function defaultServer() {
 }
 const cfg = {
   server: (bridge && bridge.getServer()) || store.get("wfg.server", "") || defaultServer(),
+  token: (bridge && bridge.getToken()) || store.get("wfg.token", ""),
   demo: bridge ? bridge.getDemo() : store.get("wfg.demo", "0") === "1",
 };
 function saveCfg() {
-  if (bridge) bridge.setConfig(cfg.server, cfg.demo);
+  if (bridge) bridge.setConfig(cfg.server, cfg.demo, cfg.token);
   store.set("wfg.server", cfg.server);
+  store.set("wfg.token", cfg.token);
   store.set("wfg.demo", cfg.demo ? "1" : "0");
+}
+function api(path) {
+  const sep = path.includes("?") ? "&" : "?";
+  return cfg.server + path + (cfg.token ? `${sep}token=${encodeURIComponent(cfg.token)}` : "");
 }
 
 // ---------------------------------------------------------------- scene
@@ -68,6 +81,7 @@ const moodLight = new THREE.PointLight(COLORS.ok, 2.5, 8, 1.5);
 scene.add(moodLight);
 
 let room = null;           // world-space helpers built from the room config
+const TRAIL = 40;          // estimated positions kept on screen
 const roomGroup = new THREE.Group();
 scene.add(roomGroup);
 
@@ -211,7 +225,17 @@ function buildRoom(conf) {
   ring.visible = false;
   roomGroup.add(ring);
 
-  room = { conf, W, D, H, floorMat, edges, rxNodes, links, ring, blockers, path: walkPath(W, D, blockers) };
+  // estimated position: a disc as big as the uncertainty, and the recent track
+  const zone = new THREE.Mesh(new THREE.CircleGeometry(1, 48), new THREE.MeshBasicMaterial({ color: 0x7fd3ff, transparent: true, opacity: 0.22, depthWrite: false }));
+  zone.rotation.x = -Math.PI / 2;
+  zone.position.y = 0.006;
+  zone.visible = false;
+  const trailGeo = new THREE.BufferGeometry().setAttribute("position", new THREE.Float32BufferAttribute(new Float32Array(TRAIL * 3), 3));
+  const trail = new THREE.Line(trailGeo, new THREE.LineBasicMaterial({ color: 0x7fd3ff, transparent: true, opacity: 0.7 }));
+  trail.frustumCulled = false;
+  roomGroup.add(zone, trail);
+
+  room = { conf, W, D, H, floorMat, edges, rxNodes, links, ring, zone, trail, track: [], blockers, path: walkPath(W, D, blockers) };
   fitCamera();
   moodLight.position.set(0, H - 0.3, 0);
   person.root.position.set(0, 0, 0);
@@ -304,10 +328,17 @@ function setPersonOpacity(a) {
 function seatFor(kind) { return room?.blockers.find(b => b.kind === kind) || null; }
 
 // Move the avatar toward what the classifier reports. Positions are illustrative: CSI gives the activity, not coordinates.
+function locationGoal(loc) {
+  if (!loc || loc.x == null) return null;
+  return toWorld([loc.x, loc.y, 0], room.conf.size);
+}
+
 function stepPerson(dt, status) {
   if (!room) return;
   const red = RED_STATES.has(status.state);
+  const intruder = status.security?.state === "intrusion";
   const activity = red ? "fall" : status.activity;
+  const located = locationGoal(status.location);
   const off = OFF_STATES.has(status.state);
   const visible = !off && activity !== "empty" && activity !== "unknown";
   sim.opacity += ((visible ? 1 : 0) - sim.opacity) * Math.min(1, dt * 3);
@@ -319,7 +350,9 @@ function stepPerson(dt, status) {
     pose = POSES.fall;
   } else {
     sim.fallPos = null;
-    if (activity === "walk") {
+    if ((activity === "walk" || activity === "still") && located) {
+      goal = located; // estimated by the server from the WiFi links
+    } else if (activity === "walk") {
       const wp = room.path[sim.waypoint % room.path.length];
       if (sim.pos.distanceTo(wp) < 0.15) sim.waypoint++;
       goal = room.path[sim.waypoint % room.path.length];
@@ -337,7 +370,7 @@ function stepPerson(dt, status) {
   if (goal) {
     const to = goal.clone().sub(sim.pos); to.y = 0;
     const dist = to.length();
-    const arrive = activity === "walk" ? 0.05 : 0.08;
+    const arrive = activity === "walk" ? (located ? 0.15 : 0.05) : 0.08;
     if (dist > arrive) {
       walking = true;
       const step = Math.min(dist, 0.9 * dt);
@@ -360,19 +393,44 @@ function stepPerson(dt, status) {
     const k = 1 + 0.25 * Math.sin(performance.now() / 200);
     ring.scale.set(k, k, k);
   }
-  const shirtColor = red ? COLORS.bad : 0x3f7fd0;
+  const shirtColor = red || intruder ? COLORS.bad : 0x3f7fd0;
   person.shirt.color.setHex(shirtColor);
+
+  // uncertainty disc and track of the estimated position
+  const loc = status.location;
+  room.zone.visible = !!located && sim.opacity > 0.3;
+  if (room.zone.visible) {
+    room.zone.position.set(located.x, 0.006, located.z);
+    room.zone.scale.setScalar(Math.max(0.3, loc.r || 0.5));
+    room.zone.material.color.setHex(red || intruder ? COLORS.bad : 0x7fd3ff);
+  }
+  const last = room.track[room.track.length - 1];
+  if (located && (!last || last.distanceTo(located) > 0.05)) {
+    room.track.push(located.clone());
+    if (room.track.length > TRAIL) room.track.shift();
+  }
+  if (!located && activity === "empty") room.track.length = 0;
+  const arr = room.trail.geometry.attributes.position;
+  room.track.forEach((p, i) => arr.setXYZ(i, p.x, 0.02, p.z));
+  room.trail.geometry.setDrawRange(0, room.track.length);
+  arr.needsUpdate = true;
 }
 
 // ---------------------------------------------------------------- UI
 const $ = id => document.getElementById(id);
 let status = { state: "offline", activity: "unknown", probs: {}, nodes: [] };
+let lastLive = null;   // last status received from the server, kept while offline
 let wasRed = false, muted = false, connected = false;
 
-function mode(state) { return RED_STATES.has(state) ? "bad" : OFF_STATES.has(state) ? "off" : "ok"; }
+const isIntrusion = s => s.security?.state === "intrusion";
+function mode(s) {
+  if (RED_STATES.has(s.state) || isIntrusion(s)) return "bad";
+  return OFF_STATES.has(s.state) ? "off" : "ok";
+}
+const hhmm = t => new Date(t * 1000).toLocaleTimeString("uz-UZ", { hour: "2-digit", minute: "2-digit" });
 
 function render(s) {
-  const m = mode(s.state);
+  const m = mode(s);
   document.body.className = m;
   const color = COLORS[m];
   scene.background.setHex(m === "bad" ? 0x2a0d0d : m === "off" ? 0x15181b : 0x0d1a14);
@@ -389,25 +447,46 @@ function render(s) {
     }
   }
 
-  const titles = { ok: "NORMAL", bad: s.state === "alert" ? "XAVF: turmayapti" : "XAVF: yiqilish", off: "Aloqa yo'q" };
-  $("stateText").textContent = titles[m];
+  const sec = s.security?.state || "off";
+  let title, sub;
+  if (isIntrusion(s)) { title = "XAVF: uyda harakat"; sub = "Qo'riqlash rejimi: begona harakat aniqlandi"; }
+  else if (RED_STATES.has(s.state)) { title = s.state === "alert" ? "XAVF: turmayapti" : "XAVF: yiqilish"; sub = room?.conf.name || "Xona"; }
+  else if (m === "off") {
+    title = "Aloqa yo'q";
+    sub = s.state === "waiting_for_nodes" ? "Platalardan signal kutilmoqda"
+      : lastLive ? `Oxirgi ma'lumot ${hhmm(lastLive.server_time || lastLive.t)} da · tarix saqlangan`
+      : cfg.server ? `Server: ${cfg.server}` : "Sozlamalarda server manzilini kiriting";
+  } else if (sec === "armed") { title = "QO'RIQLANMOQDA"; sub = "Uyda harakat yo'q"; }
+  else if (sec === "arming") { title = "Qo'riqlash yoqilmoqda"; sub = "Uydan chiqib keting, kuzatuv tez orada boshlanadi"; }
+  else { title = "NORMAL"; sub = `${room?.conf.name || "Xona"} · ${cfg.demo ? "demo rejim" : "jonli"}`; }
+  $("stateText").textContent = title;
+  $("subText").textContent = sub;
+  $("shieldBtn").classList.toggle("on", sec !== "off");
+  $("shieldBtn").setAttribute("aria-pressed", sec !== "off");
+
+  $("activity").textContent = isIntrusion(s) ? "Begona harakat" : (ACTIVITY_UZ[RED_STATES.has(s.state) ? "fall" : s.activity] || s.activity || "—");
+  const v = s.vitals || {};
+  $("breath").textContent = v.breath_bpm ? `${Math.round(v.breath_bpm)}/daq` : "—";
+  $("heart").textContent = v.heart_bpm ? `${Math.round(v.heart_bpm)}/daq` : "—";
+  const loc = s.location;
+  $("where").textContent = loc && loc.x != null ? `${loc.x.toFixed(1)}, ${loc.y.toFixed(1)} m ±${(loc.r || 0).toFixed(1)}` : "—";
   const nodes = s.nodes || [];
-  const onlineCount = nodes.filter(n => n.online).length;
-  $("subText").textContent = m === "off"
-    ? (s.state === "waiting_for_nodes" ? "Platalardan signal kutilmoqda" : cfg.demo ? "Demo" : (cfg.server ? `Server: ${cfg.server}` : "Sozlamalarda server manzilini kiriting"))
-    : `${room?.conf.name || "Xona"} · ${cfg.demo ? "demo rejim" : "jonli"}`;
-  $("activity").textContent = ACTIVITY_UZ[RED_STATES.has(s.state) ? "fall" : s.activity] || s.activity || "—";
-  const pf = s.probs?.fall;
-  $("fallProb").textContent = pf == null ? "—" : `${Math.round(pf * 100)}%`;
-  $("nodes").textContent = nodes.length ? `${onlineCount}/${nodes.length} onlayn` : "—";
+  $("nodes").textContent = nodes.length ? `${nodes.filter(n => n.online).length}/${nodes.length} onlayn` : "—";
 
   const red = m === "bad";
   if (red && !wasRed) { muted = false; $("alert").hidden = false; }
   if (!red) $("alert").hidden = true;
   if (red) {
-    $("alertText").textContent = s.state === "alert" ? "Odam yiqildi va turmayapti!" : "Yiqilish aniqlandi";
-    const since = s.fall_since ? Math.max(0, Math.round((s.server_time || Date.now() / 1000) - s.fall_since)) : null;
-    $("alertSince").textContent = since == null ? "" : `${since} soniya oldin`;
+    if (isIntrusion(s)) {
+      $("alertText").textContent = "Uyda harakat aniqlandi! Uyda hech kim bo'lmasligi kerak edi.";
+      $("alertSince").textContent = s.security.since ? `${hhmm(s.security.since)} dan beri` : "";
+      $("ackBtn").textContent = "Qo'riqlashni o'chirish";
+    } else {
+      $("alertText").textContent = s.state === "alert" ? "Odam yiqildi va turmayapti!" : "Yiqilish aniqlandi";
+      const since = s.fall_since ? Math.max(0, Math.round((s.server_time || Date.now() / 1000) - s.fall_since)) : null;
+      $("alertSince").textContent = since == null ? "" : `${since} soniya oldin`;
+      $("ackBtn").textContent = "Tasdiqlash: hammasi joyida";
+    }
   }
   alarm(red && !muted);
   wasRed = red;
@@ -435,21 +514,130 @@ function alarm(on) {
   beepTimer = setInterval(beep, 1200);
 }
 
+async function post(path, body) {
+  const r = await fetch(api(path), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body ?? {}) });
+  if (!r.ok) throw new Error(r.status);
+  return r.json();
+}
+async function setArmed(armed) {
+  if (cfg.demo) { demo.setArmed(armed); return; }
+  try { status = { ...status, security: await post("/api/security", { armed }) }; render(status); }
+  catch { toast("Server bilan aloqa yo'q: rejim o'zgarmadi"); }
+}
+function toast(text) {
+  const t = $("toast");
+  t.textContent = text; t.hidden = false;
+  clearTimeout(toast.timer);
+  toast.timer = setTimeout(() => { t.hidden = true; }, 3500);
+}
+
 $("muteBtn").onclick = () => { muted = true; alarm(false); $("alert").hidden = true; };
 $("ackBtn").onclick = async () => {
   muted = true; alarm(false); $("alert").hidden = true;
+  if (isIntrusion(status)) { setArmed(false); return; }
   if (cfg.demo) { demo.ack(); return; }
-  try { await fetch(`${cfg.server}/api/ack`, { method: "POST" }); } catch { /* shown by the next status */ }
+  try { await post("/api/ack"); } catch { /* shown by the next status */ }
 };
-$("settingsBtn").onclick = () => { $("serverInput").value = cfg.server; $("demoInput").checked = cfg.demo; $("settings").hidden = false; };
+$("shieldBtn").onclick = () => {
+  const armed = (status.security?.state || "off") !== "off";
+  if (!armed || confirm("Qo'riqlash rejimini o'chirasizmi?")) setArmed(!armed);
+};
+$("settingsBtn").onclick = () => {
+  $("serverInput").value = cfg.server; $("tokenInput").value = cfg.token; $("demoInput").checked = cfg.demo;
+  $("settings").hidden = false;
+};
 $("closeBtn").onclick = () => { $("settings").hidden = true; };
 $("saveBtn").onclick = () => {
   cfg.server = $("serverInput").value.trim().replace(/\/+$/, "");
   if (cfg.server && !/^https?:\/\//.test(cfg.server)) cfg.server = "http://" + cfg.server;
+  cfg.token = $("tokenInput").value.trim();
   cfg.demo = $("demoInput").checked;
   saveCfg();
   $("settings").hidden = true;
   start();
+};
+
+// ---------------------------------------------------------------- history kept on the device
+// In the app the background service stores every status in SQLite (also while the page is closed).
+// In a browser the page keeps its own copy in localStorage.
+const cache = (() => {
+  const KEY = "wfg.hist", EKEY = "wfg.events", MAX = 20000, MAX_EV = 300;
+  const load = k => { try { return JSON.parse(store.get(k, "[]")); } catch { return []; } };
+  let rows = load(KEY), events = load(EKEY), dirty = false;
+  setInterval(() => { if (dirty) { store.set(KEY, JSON.stringify(rows)); store.set(EKEY, JSON.stringify(events)); dirty = false; } }, 10000);
+  const native = () => bridge && bridge.history && !cfg.demo;
+  return {
+    addStatus(s) {
+      const t = s.server_time || s.t || Date.now() / 1000;
+      const last = rows[rows.length - 1];
+      const sec = s.security?.state || "off";
+      if (last && t - last.t < 5 && last.state === s.state && last.security === sec) return; // one row per 5 s
+      rows.push({ t, state: s.state, activity: s.activity, motion: s.motion ?? 0, fall: s.probs?.fall ?? 0,
+                  x: s.location?.x ?? null, y: s.location?.y ?? null, breath: s.vitals?.breath_bpm ?? null,
+                  heart: s.vitals?.heart_bpm ?? null, security: sec });
+      if (rows.length > MAX) rows.splice(0, rows.length - MAX);
+      dirty = true;
+    },
+    addRows(list) { for (const r of list) if (!rows.length || r.t > rows[rows.length - 1].t) rows.push(r); dirty = true; },
+    addEvents(list) {
+      const seen = new Set(events.map(e => `${e.t}|${e.type}`));
+      for (const e of list) if (!seen.has(`${e.t}|${e.type}`)) events.push({ t: e.t, type: e.type });
+      events.sort((a, b) => a.t - b.t);
+      if (events.length > MAX_EV) events.splice(0, events.length - MAX_EV);
+      dirty = true;
+    },
+    lastT: () => rows.length ? rows[rows.length - 1].t : 0,
+    rows(since) { return native() ? JSON.parse(bridge.history(since, 3000)) : rows.filter(r => r.t >= since); },
+    events(limit) { return native() ? JSON.parse(bridge.events(limit)) : events.slice(-limit).reverse(); },
+  };
+})();
+
+async function backfill() {
+  // the server kept recording while this device was away: fetch what we missed
+  if (cfg.demo || (bridge && bridge.history)) return; // the app's service does this itself
+  try {
+    const since = cache.lastT() || Date.now() / 1000 - 6 * 3600;
+    const [rows, events] = await Promise.all([
+      fetch(api(`/api/history?since=${since}&limit=20000`)).then(r => r.json()),
+      fetch(api(`/api/events?limit=200`)).then(r => r.json()),
+    ]);
+    cache.addRows(rows.filter((r, i) => i % 10 === 0)); // server rows are every 0.5 s; keep one per 5 s
+    cache.addEvents(events);
+  } catch { /* try again on the next connect */ }
+}
+
+let histHours = 1;
+function drawHistory() {
+  const since = Date.now() / 1000 - histHours * 3600;
+  const rows = cache.rows(since);
+  const events = cache.events(60);
+  const cv = $("histChart"), g = cv.getContext("2d");
+  const dpr = devicePixelRatio || 1, w = cv.clientWidth, h = cv.clientHeight;
+  cv.width = w * dpr; cv.height = h * dpr; g.scale(dpr, dpr);
+  g.clearRect(0, 0, w, h);
+  const now = Date.now() / 1000, x = t => (t - since) / (now - since) * w;
+  const maxM = Math.max(0.02, ...rows.map(r => r.motion || 0));
+  // background bands: green = normal, red = fall / intrusion, grey = no data
+  for (let i = 0; i < rows.length; i++) {
+    const r = rows[i], next = rows[i + 1]?.t ?? Math.min(now, r.t + 10);
+    const red = RED_STATES.has(r.state) || r.security === "intrusion";
+    g.fillStyle = red ? "rgba(229,50,45,.55)" : r.state === "offline" ? "rgba(138,148,160,.3)" : "rgba(31,191,106,.22)";
+    g.fillRect(x(r.t), 0, Math.max(1, x(Math.min(next, r.t + 30)) - x(r.t)), h);
+  }
+  g.strokeStyle = "#e8f0ec"; g.lineWidth = 1.5; g.beginPath();
+  rows.forEach((r, i) => { const px = x(r.t), py = h - 4 - (r.motion || 0) / maxM * (h - 12); i ? g.lineTo(px, py) : g.moveTo(px, py); });
+  g.stroke();
+  $("histRange").textContent = rows.length ? `${hhmm(rows[0].t)} – ${hhmm(rows[rows.length - 1].t)} · ${rows.length} yozuv` : "Bu davr uchun ma'lumot yo'q";
+  $("histEvents").innerHTML = events.length ? events.map(e =>
+    `<li class="${RED_EVENTS.has(e.type) ? "red" : ""}"><span>${new Date(e.t * 1000).toLocaleString("uz-UZ", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}</span>${EVENT_UZ[e.type] || e.type}</li>`).join("")
+    : "<li>Hodisalar yo'q</li>";
+}
+$("historyBtn").onclick = () => { $("history").hidden = false; drawHistory(); };
+$("histClose").onclick = () => { $("history").hidden = true; };
+for (const b of document.querySelectorAll("[data-hours]")) b.onclick = () => {
+  histHours = +b.dataset.hours;
+  document.querySelectorAll("[data-hours]").forEach(x => x.classList.toggle("on", x === b));
+  drawHistory();
 };
 
 // ---------------------------------------------------------------- data sources
@@ -458,7 +646,7 @@ function stopLive() { clearTimeout(retry); if (ws) { ws.onclose = null; ws.close
 
 async function loadRoom() {
   try {
-    const r = await fetch(`${cfg.server}/api/room`, { cache: "no-store" });
+    const r = await fetch(api("/api/room"), { cache: "no-store" });
     if (r.ok) { buildRoom(await r.json()); return; }
   } catch { /* keep the default room */ }
   if (!room) buildRoom(DEFAULT_ROOM);
@@ -468,13 +656,20 @@ function connectLive() {
   stopLive();
   if (!cfg.server) { status = { ...status, state: "offline" }; render(status); return; }
   loadRoom();
-  const url = cfg.server.replace(/^http/, "ws") + "/ws";
-  ws = new WebSocket(url);
-  ws.onopen = () => { connected = true; };
-  ws.onmessage = e => { status = JSON.parse(e.data); render(status); };
-  ws.onclose = () => {
+  ws = new WebSocket(api("/ws").replace(/^http/, "ws"));
+  ws.onopen = () => { connected = true; backfill(); };
+  ws.onmessage = e => {
+    status = JSON.parse(e.data);
+    lastLive = status;
+    cache.addStatus(status);
+    render(status);
+  };
+  ws.onclose = ev => {
     connected = false;
-    status = { ...status, state: "offline", nodes: [] };
+    if (ev.code === 4401) toast("Token noto'g'ri: sozlamalarni tekshiring");
+    // keep showing the last known picture, greyed out
+    status = { ...(lastLive || status), state: "offline", nodes: [], location: null };
+    cache.addStatus(status);
     render(status);
     retry = setTimeout(connectLive, 3000);
   };
@@ -482,30 +677,57 @@ function connectLive() {
 
 // Scripted day in the room so the app can be shown without boards or a server.
 const demo = (() => {
-  const script = [["walk", 9], ["sit", 7], ["walk", 6], ["lie", 7], ["walk", 6], ["fall", 0]];
-  let i = 0, t0 = 0, timer = null, fallAt = null;
+  const script = [["walk", 9], ["sit", 7], ["walk", 6], ["lie", 12], ["walk", 6], ["fall", 0]];
+  let i = 0, t0 = 0, timer = null, fallAt = null, sec = { state: "off", since: 0 }, intrusionAt = null;
+  function demoLocation(act, now) {
+    if (act === "sit") return { x: 0.9, y: 1.0, r: 0.6 };
+    if (act === "lie") return { x: 3.0, y: 2.4, r: 0.6 };
+    const a = now * 0.35;
+    return { x: 1.7 + Math.cos(a) * 0.9, y: 1.3 + Math.sin(a * 1.3) * 0.5, r: 0.5 + 0.2 * Math.sin(now) };
+  }
   function tick() {
     const now = Date.now() / 1000;
-    const [act, dur] = script[i];
+    let [act, dur] = script[i];
     let state = "monitoring", activity = act;
-    if (act === "fall") {
+    if (sec.state === "arming" && now - sec.since > 5) sec = { state: "armed", since: now };
+    if (sec.state !== "off") {
+      // the owner left: the room stays empty, then somebody comes in
+      activity = sec.state === "armed" && now - sec.since > 8 ? "walk" : "empty";
+      if (activity === "walk" && sec.state === "armed") { sec = { state: "intrusion", since: now }; cache.addEvents([{ t: now, type: "intrusion" }]); }
+      if (sec.state === "intrusion") activity = "walk";
+    } else if (act === "fall") {
       fallAt ??= now;
       state = now - fallAt > 8 ? "alert" : "fall_suspected";
       activity = now - fallAt > 2 ? "still" : "fall";
       if (now - fallAt > 40) next(now); // nobody pressed the button: the person "gets up" by themselves
     } else if (now - t0 > dur) next(now);
-    const pf = act === "fall" ? 0.86 : 0.02 + Math.random() * 0.05;
+    const resting = ["sit", "lie", "still"].includes(activity) && (act !== "lie" || now - t0 > 4);
     status = {
-      state, activity, fall_since: fallAt, server_time: now,
-      probs: { fall: pf }, nodes: [0, 1, 2].map(id => ({ node: id, online: true })),
+      state, activity, fall_since: fallAt, server_time: now, motion: activity === "walk" ? 0.03 : 0.004,
+      probs: { fall: act === "fall" && sec.state === "off" ? 0.86 : 0.02 + Math.random() * 0.05 },
+      nodes: [0, 1, 2].map(id => ({ node: id, online: true })),
+      location: activity === "empty" ? null : demoLocation(activity, now),
+      vitals: resting ? { breath_bpm: 15 + Math.sin(now / 9), heart_bpm: 71 + 2 * Math.sin(now / 13) } : {},
+      security: { ...sec, armed: sec.state !== "off" },
     };
+    cache.addStatus(status);
     render(status);
   }
-  function next(now) { i = (i + 1) % script.length; t0 = now; fallAt = null; }
+  function next(now) {
+    if (script[i][0] === "fall") cache.addEvents([{ t: fallAt ?? now, type: "fall_suspected" }]);
+    i = (i + 1) % script.length; t0 = now; fallAt = null;
+  }
   return {
     start() { this.stop(); i = 0; t0 = Date.now() / 1000; fallAt = null; if (!room) buildRoom(DEFAULT_ROOM); timer = setInterval(tick, 500); tick(); },
     stop() { clearInterval(timer); },
-    ack() { next(Date.now() / 1000); },
+    ack() { cache.addEvents([{ t: Date.now() / 1000, type: "acknowledged" }]); next(Date.now() / 1000); },
+    setArmed(on) {
+      const now = Date.now() / 1000;
+      sec = on ? { state: "arming", since: now } : { state: "off", since: now };
+      cache.addEvents([{ t: now, type: on ? "armed" : "disarmed" }]);
+      if (!on) { i = 0; t0 = now; }
+      tick();
+    },
   };
 })();
 
@@ -547,7 +769,7 @@ renderer.setAnimationLoop(() => {
     label.hidden = false;
     label.style.left = `${(p.x * 0.5 + 0.5) * innerWidth}px`;
     label.style.top = `${(-p.y * 0.5 + 0.5) * innerHeight}px`;
-    label.textContent = ACTIVITY_UZ[RED_STATES.has(status.state) ? "fall" : status.activity] || "";
+    label.textContent = isIntrusion(status) ? "Begona harakat" : ACTIVITY_UZ[RED_STATES.has(status.state) ? "fall" : status.activity] || "";
   } else label.hidden = true;
 });
 
