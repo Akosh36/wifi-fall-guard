@@ -1,5 +1,7 @@
 # Qurilmalar va o'rnatish
 
+4–6 tugunli to'liq qo'llanma (xarid, ulash, `flash_node.py` bilan proshivka, 5 RX joylashuvi, tekshirish ketma-ketligi): [hardware_nodes.md](hardware_nodes.md).
+
 ## Xarid ro'yxati
 
 Narxlar 2026-yil oktabr holatiga taxminiy (AliExpress va mahalliy do'konlar), 1$ ≈ 12 500 so'm deb olingan.
