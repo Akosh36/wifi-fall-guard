@@ -120,16 +120,28 @@ tests/               avtomatik testlar
 
 ## Hujjatlar
 
+Barcha hujjatlar o'zbek tilida.
+
+**Hamma uchun.** Loyiha haqida texnik bilimsiz tushunarli, rasmlar va sxemalar bilan: [WiFi-Fall-Guard-oddiy-tilda.docx](docs/WiFi-Fall-Guard-oddiy-tilda.docx) (Word, 5 bet).
+
+**O'rnatish va foydalanish**
+
+| Hujjat | Mavzu |
+|---|---|
+| [ornatish.md](docs/ornatish.md) | **Qurilmalarga o'rnatish: qadamma-qadam, xariddan to'liq sinovgacha** |
+| [hardware.md](docs/hardware.md) | Xarid ro'yxati, platalarni joylashtirish, tarmoq |
+| [firmware/README.md](firmware/README.md) | ESP32-S3 platalariga proshivka yozish |
+| [android.md](docs/android.md) | Android ilovani o'rnatish va ishlatish |
+| [escalation.md](docs/escalation.md) | Yiqilishdan keyingi kuzatuv, tez yordam va politsiya chaqiruvi |
+| [security_mode.md](docs/security_mode.md) | Qo'riqlash rejimi, joylashuv, nafas va yurak urishi, masofadan ulanish |
+
+**Texnik va ilmiy qism**
+
 | Hujjat | Mavzu |
 |---|---|
 | [architecture.md](docs/architecture.md) | Tizim arxitekturasi, modullar, asosiy qarorlar |
-| [ornatish.md](docs/ornatish.md) | **Qurilmalarga o'rnatish: qadamma-qadam, xariddan to'liq sinovgacha** |
-| [hardware.md](docs/hardware.md) | Xarid ro'yxati, platalarni joylashtirish, tarmoq |
 | [dataset_protocol.md](docs/dataset_protocol.md) | Dataset yozish protokoli va xavfsizlik |
 | [experiments.md](docs/experiments.md) | Tajribalar, usullar, baholash |
-| [escalation.md](docs/escalation.md) | Yiqilishdan keyingi kuzatuv, tez yordam va politsiya chaqiruvi |
-| [security_mode.md](docs/security_mode.md) | Qo'riqlash rejimi, joylashuv, nafas va yurak urishi, masofadan ulanish |
-| [android.md](docs/android.md) | Android ilovani o'rnatish va ishlatish |
 | [thesis_outline.md](docs/thesis_outline.md) | Diplomning yozma qismi rejasi |
 
 ## Holat va cheklovlar
