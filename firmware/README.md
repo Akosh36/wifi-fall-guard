@@ -1,11 +1,15 @@
 # ESP32-S3 proshivkasi
 
-Ikki loyiha bor:
+To'rtta loyiha bor:
 
 | Papka | Vazifasi | Nechta plata |
 |---|---|---|
 | `csi_tx` | Uzatuvchi. `WFG-NET` nomli Wi-Fi tarmog'ini (access point) ochadi, 6-kanalda ishlaydi | 1 |
 | `csi_rx` | Qabul qiluvchi. `WFG-NET` ga ulanadi, sekundiga 100 marta ping yuboradi, javob kadrlaridan CSI o'lchab serverga UDP orqali yuboradi | 3 (yoki ko'proq) |
+| `gsm_call` | Ixtiyoriy. SIM800L/A7670 orqali server buyrug'i bilan SMS yuboradi va qo'ng'iroq qiladi | 1 |
+| `camera` | Ixtiyoriy. Yiqilishda server so'ragan bitta JPEG surat | 1 |
+
+`gsm_call` va `camera` ni ulash va sinash: [docs/hardware_nodes.md](../docs/hardware_nodes.md#7-gsm-plata-ulash-proshivka-tekshirish).
 
 Uy routeridan ham foydalanish mumkin: unda `csi_tx` kerak emas, `csi_rx` sozlamasida routerning SSID va parolini yozing. Lekin har bir xonada o'z TX platangizni ishlatish tajribalarni solishtirishni osonlashtiradi (kanal va quvvat bir xil bo'ladi).
 
@@ -29,6 +33,8 @@ Uy routeridan ham foydalanish mumkin: unda `csi_tx` kerak emas, `csi_rx` sozlama
    - **Server IP**: noutbukingiz `WFG-NET` ga ulangandan keyingi IP manzili (odatda `192.168.4.2`). Bilmasangiz `255.255.255.255` yozing, paketlar butun tarmoqqa yuboriladi.
    - **Node id**: har bir platada boshqacha: 0, 1, 2.
    - **CSI sampling rate**: 100 Hz.
+
+Tezroq yo'l (menuconfig siz, har bir plata bitta buyruq): `python flash_node.py tx --port COM3`, `python flash_node.py rx 0 --port COM4`, ... Batafsil: [docs/hardware_nodes.md](../docs/hardware_nodes.md#4-proshivka-bir-marta-sozlash-keyin-har-bir-plata-1-buyruq).
 
 4. Noutbukni `WFG-NET` tarmog'iga ulang (parol `wfg12345`) va tekshiring:
    ```bash

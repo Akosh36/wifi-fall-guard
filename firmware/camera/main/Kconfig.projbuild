@@ -1,0 +1,32 @@
+menu "WiFi Fall Guard camera"
+
+config WFG_WIFI_SSID
+    string "WiFi SSID (same network as the server)"
+    default "WFG-NET"
+
+config WFG_WIFI_PASSWORD
+    string "WiFi password"
+    default "wfg12345"
+
+config WFG_STATIC_IP
+    string "Fixed IP address (empty = DHCP)"
+    default "192.168.4.31"
+
+config WFG_GATEWAY
+    string "Gateway for the fixed IP"
+    default "192.168.4.1"
+
+config WFG_KEY
+    string "Secret key (?key= in camera.snapshot_url, empty = none)"
+    default ""
+
+choice WFG_CAM_BOARD
+    prompt "Camera board pinout"
+    default WFG_CAM_S3_EYE
+config WFG_CAM_S3_EYE
+    bool "ESP32-S3-EYE / Freenove ESP32-S3-WROOM CAM / most 'ESP32-S3 CAM' N16R8 clones"
+config WFG_CAM_XIAO_S3
+    bool "Seeed XIAO ESP32S3 Sense"
+endchoice
+
+endmenu
