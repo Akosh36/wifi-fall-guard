@@ -71,7 +71,7 @@ Android ilovani [android-latest](https://github.com/Akosh36/wifi-fall-guard/rele
 
 ## Haqiqiy qurilmalar bilan
 
-Minimal to'plam 4 ta ESP32-S3 platasi (1 TX + 3 RX), taxminan $85. Ro'yxat va joylashtirish: [docs/hardware.md](docs/hardware.md).
+Minimal to'plam 4 ta ESP32-S3 platasi (1 TX + 3 RX), taxminan $85. Ro'yxat va joylashtirish: [docs/hardware.md](docs/hardware.md). To'liq o'rnatish tartibi: [docs/ornatish.md](docs/ornatish.md).
 
 ```bash
 wfg nodes                                                    # platalardan paket kelayotganini tekshirish
@@ -123,6 +123,7 @@ tests/               avtomatik testlar
 | Hujjat | Mavzu |
 |---|---|
 | [architecture.md](docs/architecture.md) | Tizim arxitekturasi, modullar, asosiy qarorlar |
+| [ornatish.md](docs/ornatish.md) | **Qurilmalarga o'rnatish: qadamma-qadam, xariddan to'liq sinovgacha** |
 | [hardware.md](docs/hardware.md) | Xarid ro'yxati, platalarni joylashtirish, tarmoq |
 | [dataset_protocol.md](docs/dataset_protocol.md) | Dataset yozish protokoli va xavfsizlik |
 | [experiments.md](docs/experiments.md) | Tajribalar, usullar, baholash |
